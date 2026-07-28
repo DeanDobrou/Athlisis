@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: crossfit-gym-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gymadmin
+      POSTGRES_PASSWORD: localdevpassword
+      POSTGRES_DB: crossfit_gym_catalog
+    ports:
+      - "1013:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
