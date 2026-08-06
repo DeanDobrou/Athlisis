@@ -50,7 +50,7 @@ CREATE TYPE booking_status AS ENUM (
   'cancelled'
 );
 
-CREATE TYPE score_type AS ENUM ('time', 'amrap', 'load', 'rounds_reps', 'none');
+CREATE TYPE score_type AS ENUM ('time', 'reps', 'load', 'rounds_reps', 'none');
 
 CREATE TYPE payment_method AS ENUM ('stripe', 'cash', 'pos_terminal', 'other');
 
@@ -59,19 +59,15 @@ CREATE TYPE payment_status AS ENUM ('pending', 'succeeded', 'failed', 'refunded'
 -- ---------------------------------------------------------------------
 -- 1. users — members, coaches, admins
 --
---    email/password_hash are NULLABLE so a cash drop-in can be recorded
---    without inventing a fake address (see spec §8: always create a real
---    user record for drop-ins). UNIQUE still applies to real addresses —
---    Postgres permits many NULLs under a unique constraint.
---
---    Staff log into the dashboard, so they must have credentials; that
---    is the CHECK below. A member with an email but no password_hash is
---    a legitimate mid-invite state, so that pairing is NOT enforced.
+--    email/password_hash are NOT NULL: everyone in the database is a
+--    member with a real account (spec §1) — there are no guests or
+--    drop-in strangers, so there is no unregistered-person case to
+--    support.
 -- ---------------------------------------------------------------------
 CREATE TABLE users (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  email VARCHAR(255) UNIQUE,
-  password_hash VARCHAR(255),
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
   phone VARCHAR(30),
@@ -83,14 +79,7 @@ CREATE TABLE users (
   stripe_customer_id VARCHAR(100),
   status user_status NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT staff_can_log_in CHECK (
-    role = 'member'
-    OR (
-      email IS NOT NULL
-      AND password_hash IS NOT NULL
-    )
-  )
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_users_role ON users(role);
@@ -102,7 +91,7 @@ UPDATE
 -- ---------------------------------------------------------------------
 -- 2. plans — membership products
 --    Recurring: billing_interval monthly/yearly.
---    Punch card / drop-in: billing_interval 'one_time' + class_credits.
+--    Visit pack: billing_interval 'one_time' + class_credits.
 -- ---------------------------------------------------------------------
 CREATE TABLE plans (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -129,7 +118,8 @@ UPDATE
 
 -- ---------------------------------------------------------------------
 -- 3. memberships — a user subscribed to a plan.
---    Optional: pure drop-in customers never get a row here.
+--    Optional: a member covering bookings only via the monthly unpaid
+--    allowance (spec §8) never needs a row here.
 -- ---------------------------------------------------------------------
 CREATE TABLE memberships (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -226,11 +216,6 @@ CREATE TABLE bookings (
   user_id BIGINT NOT NULL REFERENCES users(id),
   class_session_id BIGINT NOT NULL REFERENCES class_sessions(id),
   status booking_status NOT NULL DEFAULT 'booked',
-  -- only meaningful while status = 'waitlisted'
-  waitlist_position INTEGER CHECK (
-    waitlist_position IS NULL
-    OR waitlist_position > 0
-  ),
   booked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   checked_in_at TIMESTAMPTZ,
   cancelled_at TIMESTAMPTZ,
@@ -242,11 +227,11 @@ CREATE INDEX idx_bookings_session_status ON bookings(class_session_id, status);
 
 CREATE INDEX idx_bookings_user_status ON bookings(user_id, status);
 
--- Two members cannot hold the same place in one queue. Partial, so the
--- position is free to go stale on cancelled/checked_in rows.
-CREATE UNIQUE INDEX uq_bookings_waitlist_position ON bookings(class_session_id, waitlist_position)
-WHERE
-  status = 'waitlisted';
+-- Waitlist position is derived at query time, not stored:
+--   ROW_NUMBER() OVER (PARTITION BY class_session_id ORDER BY booked_at)
+-- over rows WHERE status = 'waitlisted'. A stored column plus a partial
+-- unique index breaks on promotion (renumbering trips the index
+-- mid-statement) and can drift; derived cannot.
 
 CREATE TRIGGER bookings_set_updated_at BEFORE
 UPDATE
@@ -289,7 +274,7 @@ UPDATE
 -- 8. wod_scores — a member's logged result; feeds the leaderboard.
 --    Leaderboard sorts by the column matching wods.score_type:
 --      time        -> time_seconds ASC
---      amrap       -> reps DESC
+--      reps        -> reps DESC
 --      load        -> load_kg DESC
 --      rounds_reps -> rounds DESC, reps DESC
 --    client_uuid is set by the mobile app for offline-created rows so
@@ -342,7 +327,8 @@ UPDATE
 
 -- ---------------------------------------------------------------------
 -- 9. payments — charge log. MVP: recorded manually (cash / terminal).
---    membership_id NULL = a one-off drop-in payment.
+--    membership_id NULL = a payment not tied to a membership row
+--    (e.g. settling up an unpaid booking).
 --    updated_at because refunds mutate the row after it is written.
 -- ---------------------------------------------------------------------
 CREATE TABLE payments (
@@ -357,7 +343,7 @@ CREATE TABLE payments (
   stripe_payment_intent_id VARCHAR(100) UNIQUE,
   -- NULL in MVP
   stripe_invoice_id VARCHAR(100),
-  -- 'Drop-in 2026-07-28'
+  -- 'Visit pack 2026-07-28'
   description VARCHAR(255),
   -- which admin entered it
   recorded_by BIGINT REFERENCES users(id),
