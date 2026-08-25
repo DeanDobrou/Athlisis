@@ -9,7 +9,7 @@
 --   * Money is stored as integer cents. Never floats.
 --   * All timestamps are TIMESTAMPTZ, stored UTC, rendered in the gym's
 --     timezone (GYM_TIMEZONE in the environment).
---   * Stripe columns exist but stay NULL in the MVP (manual payments).
+--   * Payments are recorded manually by staff (cash / terminal).
 --   * Every table carries updated_at + a trigger — the mobile client
 --     syncs with `GET /sync?since=`, so a table without it can never
 --     reach a device.
@@ -26,7 +26,7 @@ OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS 'BEGIN NEW.updated_at = 
 -- ---------------------------------------------------------------------
 -- Enum types
 -- ---------------------------------------------------------------------
-CREATE TYPE user_role AS ENUM ('member', 'coach', 'admin');
+CREATE TYPE user_role AS ENUM ('member', 'admin');
 
 CREATE TYPE user_status AS ENUM ('active', 'inactive', 'banned');
 
@@ -50,14 +50,12 @@ CREATE TYPE booking_status AS ENUM (
   'cancelled'
 );
 
-CREATE TYPE score_type AS ENUM ('time', 'reps', 'load', 'rounds_reps', 'none');
-
-CREATE TYPE payment_method AS ENUM ('stripe', 'cash', 'pos_terminal', 'other');
+CREATE TYPE payment_method AS ENUM ('cash', 'pos_terminal', 'other');
 
 CREATE TYPE payment_status AS ENUM ('pending', 'succeeded', 'failed', 'refunded');
 
 -- ---------------------------------------------------------------------
--- 1. users — members, coaches, admins
+-- 1. users — members and admins
 --
 --    email/password_hash are NOT NULL: everyone in the database is a
 --    member with a real account (spec §1) — there are no guests or
@@ -75,8 +73,6 @@ CREATE TABLE users (
   avatar_url VARCHAR(500),
   date_of_birth DATE,
   emergency_contact VARCHAR(255),
-  -- NULL in MVP
-  stripe_customer_id VARCHAR(100),
   status user_status NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -105,8 +101,6 @@ CREATE TABLE plans (
     class_credits IS NULL
     OR class_credits > 0
   ),
-  -- NULL in MVP
-  stripe_price_id VARCHAR(100),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -136,8 +130,6 @@ CREATE TABLE memberships (
     credits_remaining IS NULL
     OR credits_remaining >= 0
   ),
-  -- NULL in MVP
-  stripe_subscription_id VARCHAR(100),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (
@@ -160,9 +152,8 @@ CREATE TABLE class_types (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   description TEXT,
-  -- calendar UI, e.g. '#E5484D'
   color_hex CHAR(7),
-  default_capacity INTEGER NOT NULL DEFAULT 14 CHECK (default_capacity > 0),
+  default_capacity INTEGER NOT NULL DEFAULT 8 CHECK (default_capacity > 0),
   default_duration_min INTEGER NOT NULL DEFAULT 60 CHECK (default_duration_min > 0),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -239,7 +230,7 @@ UPDATE
 
 -- ---------------------------------------------------------------------
 -- 7. wods — the programmed workout for a date.
---    published_at NULL = draft, visible to coaches only.
+--    published_at NULL = draft, visible to admins only.
 -- ---------------------------------------------------------------------
 CREATE TABLE wods (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -249,7 +240,6 @@ CREATE TABLE wods (
   title VARCHAR(150),
   -- markdown ok
   description TEXT NOT NULL,
-  score_type score_type NOT NULL DEFAULT 'time',
   time_cap_seconds INTEGER CHECK (
     time_cap_seconds IS NULL
     OR time_cap_seconds > 0
@@ -271,62 +261,7 @@ UPDATE
   ON wods FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 8. wod_scores — a member's logged result; feeds the leaderboard.
---    Leaderboard sorts by the column matching wods.score_type:
---      time        -> time_seconds ASC
---      reps        -> reps DESC
---      load        -> load_kg DESC
---      rounds_reps -> rounds DESC, reps DESC
---    client_uuid is set by the mobile app for offline-created rows so
---    sync retries upsert instead of duplicating.
---
---    NO ON DELETE CASCADE from wods: deleting a programmed WOD would
---    silently destroy logged member results, and delta-sync has no way
---    to tell a device that a row disappeared. A scored WOD cannot be
---    deleted — unpublish it instead.
--- ---------------------------------------------------------------------
-CREATE TABLE wod_scores (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  -- NULL for rows created on the web
-  client_uuid UUID UNIQUE,
-  wod_id BIGINT NOT NULL REFERENCES wods(id),
-  user_id BIGINT NOT NULL REFERENCES users(id),
-  time_seconds INTEGER CHECK (
-    time_seconds IS NULL
-    OR time_seconds > 0
-  ),
-  rounds INTEGER CHECK (
-    rounds IS NULL
-    OR rounds >= 0
-  ),
-  reps INTEGER CHECK (
-    reps IS NULL
-    OR reps >= 0
-  ),
-  load_kg NUMERIC(6, 2) CHECK (
-    load_kg IS NULL
-    OR load_kg >= 0
-  ),
-  is_rx BOOLEAN NOT NULL DEFAULT FALSE,
-  -- capped scores sort last
-  finished_within_cap BOOLEAN NOT NULL DEFAULT TRUE,
-  notes VARCHAR(500),
-  logged_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (wod_id, user_id),
-  -- A score row with no score is meaningless; attendance is tracked by
-  -- bookings.checked_in, not here. score_type 'none' WODs get no rows.
-  CONSTRAINT score_not_empty CHECK (num_nonnulls(time_seconds, rounds, reps, load_kg) > 0)
-);
-
-CREATE INDEX idx_scores_user ON wod_scores(user_id);
-
-CREATE TRIGGER wod_scores_set_updated_at BEFORE
-UPDATE
-  ON wod_scores FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
--- ---------------------------------------------------------------------
--- 9. payments — charge log. MVP: recorded manually (cash / terminal).
+-- 8. payments — charge log. MVP: recorded manually (cash / terminal).
 --    membership_id NULL = a payment not tied to a membership row
 --    (e.g. settling up an unpaid booking).
 --    updated_at because refunds mutate the row after it is written.
@@ -339,10 +274,6 @@ CREATE TABLE payments (
   currency CHAR(3) NOT NULL DEFAULT 'EUR',
   method payment_method NOT NULL DEFAULT 'cash',
   status payment_status NOT NULL DEFAULT 'succeeded',
-  -- NULL in MVP
-  stripe_payment_intent_id VARCHAR(100) UNIQUE,
-  -- NULL in MVP
-  stripe_invoice_id VARCHAR(100),
   -- 'Visit pack 2026-07-28'
   description VARCHAR(255),
   -- which admin entered it
