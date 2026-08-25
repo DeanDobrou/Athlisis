@@ -40,4 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-PROJECT_SPEC.md
+# agent tooling: .claude/skills symlinks duplicate .agents/skills on Windows
+# (core.symlinks=false), so track .agents/ only
+.claude/
