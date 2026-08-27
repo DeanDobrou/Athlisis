@@ -22,7 +22,8 @@ earns its keep on booking and attendance, which is what keeps them paying.
 
 **Everyone in the database is a member.** There are no guests, no drop-in
 strangers, no public sign-ups. What varies is not *who* the person is but
-*how a given booking is paid for* — see §8.
+*how a given booking is paid for* — see §8. Accounts are created by staff,
+never by the person themselves — see §10.
 
 ---
 
@@ -39,6 +40,7 @@ strangers, no public sign-ups. What varies is not *who* the person is but
 | Local dev | Postgres in **Docker**, Next.js via `npm run dev` (faster hot reload) |
 | Production | **Own VPS**, everything in Docker, **Caddy** reverse proxy (auto HTTPS) |
 | Payments | **Manual entry only.** No payment processor; no Stripe columns |
+| Email | Transactional only — welcome credentials. Transport not yet chosen; see §10 |
 
 **Architecture shape:** one API, two clients — the same pattern as a
 yii2 + Ionic setup, with TypeScript everywhere.
@@ -73,7 +75,7 @@ carry the user id and role, nothing else.
 Gym identity is environment configuration (`GYM_NAME`, `GYM_TIMEZONE`,
 `GYM_CURRENCY`) or simply the app's design. Booking rules staff need to change
 without a deploy — cutoff, cancellation window, the unpaid-booking allowance —
-get a one-row `settings` table in `002` when bookings land.
+get a one-row `settings` table in the migration that brings bookings.
 
 ---
 
@@ -92,7 +94,12 @@ get a one-row `settings` table in `002` when bookings land.
 | 7 | `wods` | programmed workout for a date; `published_at` = draft/live |
 | 8 | `payments` | charge log; manual in MVP |
 
-Landing in `002` with bookings: `settings` (one row) and `closures` (§8).
+Landing with bookings: `settings` (one row) and `closures` (§8).
+
+`002_drop_banned_status.sql` removed `banned` from `user_status`: a member
+either has access or does not, so `active` / `inactive` covers it. Postgres has
+no `ALTER TYPE ... DROP VALUE`, so that migration rebuilds the enum and
+re-points the column — the pattern to copy if another enum ever loses a value.
 
 **Deferred to post-MVP: `wod_scores`.** Scores, the leaderboard and benchmarks
 are out of the MVP, so the table was dropped rather than left empty. The design
@@ -334,15 +341,80 @@ or install PowerShell 7 / use Git Bash.)
 
 ---
 
-## 10. Files so far
+## 10. Accounts and onboarding
+
+**Nobody signs themselves up.** There is no registration form, no public
+sign-up, no invite-accept flow. The only route into the database is an admin
+creating the account. The app has exactly one unauthenticated screen: the
+login form.
+
+- **Admins** are created directly by the gym owner as a database row — no UI,
+  no seeding script. `node lib/password.ts "the password"` prints a hash to
+  paste into `users.password_hash`. There is no "promote to admin" button in
+  the MVP: two roles and a handful of admins do not justify one.
+- **Members** are created by an admin on the members screen. The create form
+  generates a random password and carries a **Send welcome email** checkbox.
+  When it is ticked the member receives an email containing their email
+  address and that generated password.
+- **Changing the password is optional.** A member may change it from the
+  mobile app; nothing forces them to.
+
+**The trade-off, recorded deliberately.** A generated password sent by email
+sits in the member's inbox indefinitely, and email is not a secure channel.
+Accepted here: this is one gym, the worst case is a stranger seeing someone's
+class bookings, and there is no payment data or card on file anywhere in the
+app. The cheap upgrade if that ever stops being true is a
+`must_change_password` boolean on `users`, set at creation and cleared on
+first change, which turns the generated password into a one-time credential.
+Additive column, permitted by §6 rule 3.
+
+**What this needs: no schema change.** `users.password_hash` already exists,
+and the checkbox is a form option rather than stored state. Deliberately left
+out of the MVP: recording whether the welcome email was sent
+(`welcome_email_sent_at`), password-reset links, and email verification. All
+three are additive later; none is needed to open the doors.
+
+**Still open — the email transport.** Nothing in the stack sends email yet.
+Do not run a mail server on the VPS: deliverability is a full-time job and a
+fresh IP lands in spam. Two sane options, both a few lines of code. SMTP
+through the mailbox the gym already sends mail from (Google Workspace,
+Fastmail, whatever it is) via `nodemailer` adds no new account. A
+transactional provider (Resend, Postmark, SES) costs an API key but gives
+delivery logs and survives the mailbox password changing. Decide before the
+members screen ships.
+
+---
+
+## 11. Files so far
 
 | File | Role | Status |
 |---|---|---|
-| `db/migrations/001_init_schema.sql` | the schema, 8 tables | ✅ applied |
-| `lib/db.ts` | single pool + `withTransaction` | ✅ |
-| `scripts/migrate.mjs` | migration runner (`--dry-run`) | ✅ |
-| `app/api/health/route.ts` | connectivity smoke test | ✅ |
-| `db/migrations.ts` | mobile SQLite migrations + runner | ⬜ not written |
+| `db/migrations/001_init_schema.sql` | the schema, 8 tables | applied |
+| `db/migrations/002_drop_banned_status.sql` | `user_status` loses `banned` | applied |
+| `lib/db.ts` | single pool + `withTransaction` | done |
+| `scripts/migrate.mjs` | migration runner (`--dry-run`) | done |
+| `app/api/health/route.ts` | connectivity smoke test | done |
+| `app/page.tsx` | redirects to `/dashboard` | done |
+| `lib/password.ts` | scrypt hash/verify; run directly to mint a hash | done |
+| `lib/session.ts` | JWT cookie sign/verify, `requireAdmin()` — the real gate | done |
+| `lib/rate-limit.ts` | in-memory login throttle | done |
+| `proxy.ts` | optimistic route guard (Next 16 renamed `middleware`) | done |
+| `app/actions/auth.ts` | `login` / `logout` Server Actions | done |
+| `app/login/login-form.tsx` | client form, `useActionState` errors | done |
+| `app/login/page.tsx` | login card | done |
+| `app/(admin)/layout.tsx` | sidebar shell; deliberately holds **no** auth check | done |
+| `app/(admin)/dashboard/page.tsx` | calls `requireAdmin()`; otherwise a stub | stub |
+| `components/app-sidebar.tsx` | nav + sign out; links to unbuilt routes | done |
+| `components/ui/*` | shadcn/ui primitives | done |
+| `lib/utils.ts` | `cn()` class helper | done |
+| `db/migrations.ts` | mobile SQLite migrations + runner | not written |
+
+**Why the auth check is not in `app/(admin)/layout.tsx`.** Layouts do not
+re-render on client-side navigation, so a check there silently stops running
+after the first page load. `proxy.ts` does a cheap cookie check to keep logged
+-out users out, and every admin page and Server Action calls `requireAdmin()`
+itself — a Server Action is its own entry point and a page-level check does not
+cover it.
 
 **`lib/db.ts` notes:** the pool is cached on `globalThis` because Next.js
 hot-reload re-evaluates modules and would otherwise leak a new pool on every
@@ -361,28 +433,34 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
 
 ---
 
-## 11. Build order
+## 12. Build order
 
 **MVP (web first):**
 
-1. ✅ Local environment — Postgres in Docker, Next.js scaffolded
-2. ✅ Schema + migration runner + connection manager + `/api/health`
-3. ⬜ **Auth** — login, JWT, sessions (everything sits behind it)
-4. ⬜ Schedule + bookings — capacity, waitlists, check-in, entitlement
-   resolution; brings `002` (`settings`, `closures`) and the session generator
-5. ⬜ WODs — program, publish, show on the schedule
-6. ⬜ Manual payments dashboard, incl. the unpaid-bookings list
+1. **Done** — Local environment: Postgres in Docker, Next.js scaffolded
+2. **Done** — Schema + migration runner + connection manager + `/api/health`
+3. **Done** — **Auth**: login form wired, JWT session cookie, `proxy.ts` guard,
+   `requireAdmin()`, login throttling, sign out
+4. **Next** — **Members**: create, edit and list; generated password and welcome email
+   (§10). Brings the email transport decision. Bookings need members to
+   exist, so this comes before the schedule.
+5. Schedule + bookings — capacity, waitlists, check-in, entitlement
+   resolution; brings `settings`, `closures` and the session generator
+6. WODs — program, publish, show on the schedule
+7. Manual payments dashboard, incl. the unpaid-bookings list
 
 **Then:** mobile app (Expo) → pull sync → scores + leaderboard (brings push sync with them) → push notifications → benchmarks.
 
 ### Settled details
 
-- **`users.email` / `password_hash` are `NOT NULL`.** Everyone has an account.
-  (Revisit only if staff must hand-enter bookings for members who will never
-  open the app.)
+- **`users.email` / `password_hash` are `NOT NULL`.** Everyone has an account,
+  created by staff with a generated password (§10). (Revisit only if staff must
+  hand-enter bookings for members who will never open the app.)
 - **Two roles only: `member` and `admin`.** No `coach` role. Admins run the web
   dashboard; members only ever use the mobile app. Authorisation is therefore
-  one check — "is this user an admin" — not a permission matrix.
+  one check — "is this user an admin" — not a permission matrix. The login
+  action enforces it: a `member` who submits correct credentials on the web
+  form is refused, and gets the same generic message as a wrong password.
   `class_sessions.coach_id` stays as "who is running this class", now pointing
   at an admin user.
 - **Session generation:** no template table. A "copy last week" generator
