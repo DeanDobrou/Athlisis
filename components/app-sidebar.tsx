@@ -7,12 +7,15 @@ import {
   CreditCard,
   Dumbbell,
   LayoutDashboard,
+  LogOut,
   Users,
 } from "lucide-react";
 
+import { logout } from "@/app/actions/auth";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -56,6 +59,18 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <form action={logout}>
+              <SidebarMenuButton type="submit" className="w-full">
+                <LogOut />
+                <span>Sign out</span>
+              </SidebarMenuButton>
+            </form>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }
