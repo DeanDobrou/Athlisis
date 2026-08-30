@@ -1,5 +1,5 @@
 -- =====================================================================
--- CrossFit Gym App — Schema (PostgreSQL 17)
+-- CrossFit Gym App - Schema (PostgreSQL 17)
 -- File: db/migrations/001_init_schema.sql
 --
 -- ONE GYM, ONE DATABASE. There is no tenant column anywhere because
@@ -10,7 +10,7 @@
 --   * All timestamps are TIMESTAMPTZ, stored UTC, rendered in the gym's
 --     timezone (GYM_TIMEZONE in the environment).
 --   * Payments are recorded manually by staff (cash / terminal).
---   * Every table carries updated_at + a trigger — the mobile client
+--   * Every table carries updated_at + a trigger - the mobile client
 --     syncs with `GET /sync?since=`, so a table without it can never
 --     reach a device.
 --   * Comments sit ABOVE the column they describe, and the trigger
@@ -55,10 +55,10 @@ CREATE TYPE payment_method AS ENUM ('cash', 'pos_terminal', 'other');
 CREATE TYPE payment_status AS ENUM ('pending', 'succeeded', 'failed', 'refunded');
 
 -- ---------------------------------------------------------------------
--- 1. users — members and admins
+-- 1. users - members and admins
 --
 --    email/password_hash are NOT NULL: everyone in the database is a
---    member with a real account (spec §1) — there are no guests or
+--    member with a real account (spec §1) - there are no guests or
 --    drop-in strangers, so there is no unregistered-person case to
 --    support.
 -- ---------------------------------------------------------------------
@@ -85,7 +85,7 @@ UPDATE
   ON users FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 2. plans — membership products
+-- 2. plans - membership products
 --    Recurring: billing_interval monthly/yearly.
 --    Visit pack: billing_interval 'one_time' + class_credits.
 -- ---------------------------------------------------------------------
@@ -111,7 +111,7 @@ UPDATE
   ON plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 3. memberships — a user subscribed to a plan.
+-- 3. memberships - a user subscribed to a plan.
 --    Optional: a member covering bookings only via the monthly unpaid
 --    allowance (spec §8) never needs a row here.
 -- ---------------------------------------------------------------------
@@ -145,7 +145,7 @@ UPDATE
   ON memberships FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 4. class_types — WOD, Open Gym, Foundations...
+-- 4. class_types - WOD, Open Gym, Foundations...
 --    Mirrored to the mobile client, so it needs updated_at like the rest.
 -- ---------------------------------------------------------------------
 CREATE TABLE class_types (
@@ -165,7 +165,7 @@ UPDATE
   ON class_types FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 5. class_sessions — a concrete class occurrence on the calendar
+-- 5. class_sessions - a concrete class occurrence on the calendar
 -- ---------------------------------------------------------------------
 CREATE TABLE class_sessions (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -190,12 +190,12 @@ UPDATE
   ON class_sessions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 6. bookings — user <-> session, full status lifecycle.
+-- 6. bookings - user <-> session, full status lifecycle.
 --    Powers attendance, waitlists, no-show tracking, churn alerts.
 --    Online-only action (needs a real-time capacity check).
 --
 --    UNIQUE (user_id, class_session_id) means a member who cancels and
---    rebooks the same class UPDATEs their row — the booking service must
+--    rebooks the same class UPDATEs their row - the booking service must
 --    be upsert-shaped, there is never a second row.
 --
 --    Capacity is NOT enforced here: it is a count across rows, so the
@@ -229,7 +229,7 @@ UPDATE
   ON bookings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 7. wods — the programmed workout for a date.
+-- 7. wods - the programmed workout for a date.
 --    published_at NULL = draft, visible to admins only.
 -- ---------------------------------------------------------------------
 CREATE TABLE wods (
@@ -261,7 +261,7 @@ UPDATE
   ON wods FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---------------------------------------------------------------------
--- 8. payments — charge log. MVP: recorded manually (cash / terminal).
+-- 8. payments - charge log. MVP: recorded manually (cash / terminal).
 --    membership_id NULL = a payment not tied to a membership row
 --    (e.g. settling up an unpaid booking).
 --    updated_at because refunds mutate the row after it is written.

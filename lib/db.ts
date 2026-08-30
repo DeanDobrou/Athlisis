@@ -1,10 +1,5 @@
 import { Pool, type PoolClient } from "pg";
 
-// One gym, one database, one pool.
-//
-// Cached on globalThis because Next.js hot-reload re-evaluates modules on
-// every file save — without this, each save would leak a fresh pool until
-// Postgres refused connections.
 const globalForDb = globalThis as unknown as { pool?: Pool };
 
 export function db(): Pool {
@@ -22,7 +17,7 @@ export function db(): Pool {
  * Run `fn` inside a transaction on a dedicated client, committing on success
  * and rolling back on any throw.
  *
- * Every multi-statement write goes through here — most importantly booking,
+ * Every multi-statement write goes through here - most importantly booking,
  * which must `SELECT ... FOR UPDATE` the session row before counting against
  * capacity, or concurrent requests will oversell a class.
  */
@@ -36,7 +31,6 @@ export async function withTransaction<T>(
     await client.query("COMMIT");
     return result;
   } catch (err) {
-    // A failing ROLLBACK (dead connection) must not mask the real error.
     await client.query("ROLLBACK").catch(() => {});
     throw err;
   } finally {

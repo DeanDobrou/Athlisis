@@ -1,9 +1,9 @@
 -- =====================================================================
--- 003 — case-insensitive email uniqueness
+-- 003 - case-insensitive email uniqueness
 --
 -- Login matches WHERE lower(email) = $1, but the column's UNIQUE
 -- constraint is case-sensitive, so Bob@gym.com and bob@gym.com could
--- coexist — and the login query would only ever find one of them.
+-- coexist - and the login query would only ever find one of them.
 -- Enforce uniqueness at the granularity the login code already assumes,
 -- and drop the old constraint the new index makes redundant.
 --

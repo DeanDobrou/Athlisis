@@ -1,5 +1,5 @@
 -- =====================================================================
--- 002 — drop the unused 'banned' user status
+-- 002 - drop the unused 'banned' user status
 --
 -- active/inactive covers everything the gym needs: a member either has
 -- access or does not. Postgres has no ALTER TYPE ... DROP VALUE, so the

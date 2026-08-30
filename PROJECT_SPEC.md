@@ -1,4 +1,4 @@
-# CrossFit Gym App — Project Spec
+# CrossFit Gym App - Project Spec
 
 _Working document. Captures every decision made so far._
 
@@ -6,7 +6,7 @@ _Working document. Captures every decision made so far._
 
 ## 1. What we're building
 
-A custom, branded web + mobile app for **one CrossFit gym** — ours. Not a
+A custom, branded web + mobile app for **one CrossFit gym** - ours. Not a
 product for gyms in general; a product for this gym.
 
 **Members (mobile app):** book classes and see the daily WOD. Score logging
@@ -22,8 +22,8 @@ earns its keep on booking and attendance, which is what keeps them paying.
 
 **Everyone in the database is a member.** There are no guests, no drop-in
 strangers, no public sign-ups. What varies is not *who* the person is but
-*how a given booking is paid for* — see §8. Accounts are created by staff,
-never by the person themselves — see §10.
+*how a given booking is paid for* - see §8. Accounts are created by staff,
+never by the person themselves - see §10.
 
 ---
 
@@ -32,17 +32,17 @@ never by the person themselves — see §10.
 | Layer | Choice |
 |---|---|
 | Database | **PostgreSQL 17** (switched from MySQL early; nothing deployed yet) |
-| Backend + Web | **Next.js** (App Router) — dashboard *and* API route handlers in one codebase |
-| DB access | Plain SQL via the `pg` driver — no ORM |
+| Backend + Web | **Next.js** (App Router) - dashboard *and* API route handlers in one codebase |
+| DB access | Plain SQL via the `pg` driver - no ORM |
 | Mobile | **React Native + Expo**, local **SQLite** (`expo-sqlite`) |
 | Auth storage (mobile) | `expo-secure-store` (device keychain) |
 | Language | TypeScript end to end |
 | Local dev | Postgres in **Docker**, Next.js via `npm run dev` (faster hot reload) |
 | Production | **Own VPS**, everything in Docker, **Caddy** reverse proxy (auto HTTPS) |
 | Payments | **Manual entry only.** No payment processor; no Stripe columns |
-| Email | Transactional only — welcome credentials. Transport not yet chosen; see §10 |
+| Email | Transactional only - welcome credentials. Transport not yet chosen; see §10 |
 
-**Architecture shape:** one API, two clients — the same pattern as a
+**Architecture shape:** one API, two clients - the same pattern as a
 yii2 + Ionic setup, with TypeScript everywhere.
 
 **Code organisation rule:** business logic lives in service files
@@ -51,16 +51,16 @@ Keeps logic portable and testable.
 
 ### Rejected alternatives (and why)
 
-- **Buying Wodify / PushPress** — user wants their own brand and product.
-- **NestJS as a separate backend** — Next.js route handlers cover it; one
+- **Buying Wodify / PushPress** - user wants their own brand and product.
+- **NestJS as a separate backend** - Next.js route handlers cover it; one
   codebase, one deployment. Trade-off accepted: less enforced structure.
-- **Prisma / an ORM** — user knows SQL well; plain SQL removes a layer.
+- **Prisma / an ORM** - user knows SQL well; plain SQL removes a layer.
   (`Kysely` is the fallback if typed queries are ever missed.)
-- **Supabase** — we are barely using the features that make it special. We have
+- **Supabase** - we are barely using the features that make it special. We have
   custom auth and custom sync, which is most of what you'd adopt Supabase *for*.
   (It is open source and self-hostable, but self-hosting means running a
   constellation of services.)
-- **Railway / Neon** — fine managed Postgres, but the user prefers a VPS.
+- **Railway / Neon** - fine managed Postgres, but the user prefers a VPS.
   Note: Railway is *not* open source; the open-source part that matters is
   Postgres itself, which is identical everywhere. No lock-in either way.
 
@@ -68,13 +68,13 @@ Keeps logic portable and testable.
 
 ## 3. One gym, one database
 
-One Postgres database holds everything — users, bookings, WODs, payments. No
+One Postgres database holds everything - users, bookings, WODs, payments. No
 tenant concept, no routing. The app opens straight to a login screen, and JWTs
 carry the user id and role, nothing else.
 
 Gym identity is environment configuration (`GYM_NAME`, `GYM_TIMEZONE`,
 `GYM_CURRENCY`) or simply the app's design. Booking rules staff need to change
-without a deploy — cutoff, cancellation window, the unpaid-booking allowance —
+without a deploy - cutoff, cancellation window, the unpaid-booking allowance -
 get a one-row `settings` table in the migration that brings bookings.
 
 ---
@@ -99,11 +99,15 @@ Landing with bookings: `settings` (one row) and `closures` (§8).
 `002_drop_banned_status.sql` removed `banned` from `user_status`: a member
 either has access or does not, so `active` / `inactive` covers it. Postgres has
 no `ALTER TYPE ... DROP VALUE`, so that migration rebuilds the enum and
-re-points the column — the pattern to copy if another enum ever loses a value.
+re-points the column - the pattern to copy if another enum ever loses a value.
+
+`003_unique_lower_email.sql` made email uniqueness case-insensitive.
+`004_drop_emergency_contact.sql` dropped `users.emergency_contact`: the member
+form no longer collects it and nothing read it.
 
 **Deferred to post-MVP: `wod_scores`.** Scores, the leaderboard and benchmarks
 are out of the MVP, so the table was dropped rather than left empty. The design
-work is not lost — see "Scores, when they return" below.
+work is not lost - see "Scores, when they return" below.
 
 **Design decisions baked in:**
 
@@ -112,12 +116,12 @@ work is not lost — see "Scores, when they return" below.
   `booked → waitlisted → checked_in → no_show → cancelled`. This one table
   powers attendance, waitlist promotion, no-show tracking, and churn alerts.
 - **Unique (user, session)** on bookings. Cancel-then-rebook is therefore an
-  `UPDATE`, so the booking service is upsert-shaped — there is never a second
+  `UPDATE`, so the booking service is upsert-shaped - there is never a second
   row.
 - **`bookings.entitlement_source`** (`subscription` | `credit` | `unpaid`)
   records *how* each booking was paid for. Without it you cannot tell which
   bookings owe money, and cancellation cannot know whether to refund a credit.
-- **Capacity is not a DB constraint** — it is a count across rows. The booking
+- **Capacity is not a DB constraint** - it is a count across rows. The booking
   transaction must `SELECT ... FOR UPDATE` the session row, or concurrent
   requests will oversell the class. Entitlement resolution happens in that
   same transaction.
@@ -138,7 +142,7 @@ work is not lost — see "Scores, when they return" below.
 - **Every table has `updated_at` + a trigger.** The mobile client pulls with
   `GET /sync?since=`, so a table without one can never reach a device.
 - **Cut from the MVP: scores, leaderboard, benchmarks.** All three ship later
-  as their own migration — which is exactly the update path in §6.
+  as their own migration - which is exactly the update path in §6.
 
 ### Scores, when they return
 
@@ -147,7 +151,7 @@ rather than re-litigated:
 
 - **Typed columns, not a generic value:** `time_seconds`, `rounds`, `reps`,
   `load_kg`. A per-WOD `score_type` (`time | reps | rounds_reps | load | none`)
-  tells the leaderboard which to sort by — `time` ASC, `reps` DESC,
+  tells the leaderboard which to sort by - `time` ASC, `reps` DESC,
   `rounds_reps` → rounds DESC then reps DESC, `load` DESC. No `amrap`: AMRAP is
   a workout *format*, scored either as rounds+reps or as total reps.
 - **`scaling` is an enum** (`rx_plus`, `rx`, `scaled`), never a boolean. Rx+ is
@@ -155,9 +159,9 @@ rather than re-litigated:
   order, Postgres sorts the enum by declaration order, so the leaderboard's
   primary sort is a plain `ORDER BY scaling`.
 - **`finished_within_cap`** sorts capped scores last. `wods.time_cap_seconds`
-  was kept in `001` for exactly this — the cap is programming information worth
+  was kept in `001` for exactly this - the cap is programming information worth
   showing even with no score to compare it against.
-- **Unique (wod, user)**, and **no `ON DELETE CASCADE` from `wods`** — deleting
+- **Unique (wod, user)**, and **no `ON DELETE CASCADE` from `wods`** - deleting
   a programmed WOD must not destroy logged results that devices have synced.
 - **`client_uuid`** makes offline score sync idempotent (see §7).
 - **Still open when this lands:** a `score_type = 'none'` WOD collides with a
@@ -172,10 +176,10 @@ rather than re-litigated:
 
 Mirrors **only member-facing data**: `wods`, `class_sessions`, `class_types`,
 own `bookings`, plus `sync_state`. Admin data (payments, memberships) stays
-server-only — this keeps the sync surface small.
+server-only - this keeps the sync surface small.
 
 With scores deferred, nothing on the device is created offline, so there is no
-`pending_ops` outbox and no local `members` table yet — both return with the
+`pending_ops` outbox and no local `members` table yet - both return with the
 leaderboard.
 
 SQLite has no ENUM → `TEXT` + `CHECK`. Timestamps are ISO-8601 TEXT (UTC).
@@ -188,7 +192,7 @@ SQLite has no ENUM → `TEXT` + `CHECK`. Timestamps are ISO-8601 TEXT (UTC).
 log out or lose their data. Three rules guarantee it:
 
 1. **Auth never lives in the database.** JWTs go in `expo-secure-store`.
-   Even a full local-DB rebuild leaves the session intact — the app just
+   Even a full local-DB rebuild leaves the session intact - the app just
    silently re-downloads data.
 2. **The local DB migrates itself, never resets.** `PRAGMA user_version` +
    an append-only `MIGRATIONS[]` array. On launch the app applies only what
@@ -196,7 +200,7 @@ log out or lose their data. Three rules guarantee it:
    is just `MIGRATIONS[1]`: user updates, opens the app, tables appear in
    milliseconds, background sync fills them, user notices nothing.
 3. **Server changes are additive; the client tolerates unknowns.** Add columns
-   and tables — never rename or repurpose. (A rename = new column + backfill,
+   and tables - never rename or repurpose. (A rename = new column + backfill,
    retire the old one only once all app versions using it are gone; mobile
    users update slowly.) Clients parse only the fields they know and ignore
    extras. Result: old app + new server works, new app + old server works.
@@ -210,10 +214,10 @@ log out or lose their data. Three rules guarantee it:
   `sync_state` tracks the last successful sync per entity. Soft-deleted rows
   come back too, so the device can remove them locally.
 - **Push: nothing to push.** Scores were the only thing ever created offline,
-  and they are deferred, so sync is **pull-only** — no outbox, no
+  and they are deferred, so sync is **pull-only** - no outbox, no
   `client_uuid`, no FIFO flush, no local/server id reconciliation. A whole half
   of the sync engine does not need building for the MVP.
-- **Bookings are online-only** — booking needs a real-time capacity *and
+- **Bookings are online-only** - booking needs a real-time capacity *and
   entitlement* check, and an offline "booking" that silently fails hours later
   is worse UX than an honest "you're offline" at tap time. The local
   `bookings` table is a read-only mirror of confirmed bookings.
@@ -225,7 +229,7 @@ flushes FIFO; the server upserts on `client_uuid` and returns the real
 `server_id`; the local row is marked synced and the op deleted. Idempotency
 comes from a client-generated UUID per row with a unique constraint
 server-side, so a retried request is a no-op rather than a duplicate. Unsynced
-data is lost on uninstall — accepted, not engineered around, since the sync
+data is lost on uninstall - accepted, not engineered around, since the sync
 window is minutes.
 
 ---
@@ -235,7 +239,7 @@ window is minutes.
 **There is no payment processor.** Staff record payments by hand (default
 method `cash`), renewals are marked manually, and `past_due` is set by hand
 rather than by a webhook. The Stripe columns that once sat unused were
-dropped — adding a processor later is an additive `ALTER TABLE ADD COLUMN`,
+dropped - adding a processor later is an additive `ALTER TABLE ADD COLUMN`,
 which §6 rule 3 already permits, so there was nothing to gain by carrying
 five dead columns.
 
@@ -252,7 +256,7 @@ Resolved inside the booking transaction, in this order:
 The order matters: check subscription *first*, or a member holding both a
 subscription and a leftover visit pack silently burns pack credits.
 
-**The one-unpaid-per-month allowance** is the grace slot — a member can book
+**The one-unpaid-per-month allowance** is the grace slot - a member can book
 before settling up, once per month. Enforced in the service layer, not as a DB
 constraint: the rule spans `bookings` and `class_sessions` (the month comes
 from the session date), so a unique index would mean denormalising the date
@@ -267,14 +271,14 @@ nothing.
 **Staff view:** a dashboard list of members with unpaid bookings. Without it
 the grace slot is leakage rather than a convenience.
 
-### Visit packs — the August case
+### Visit packs - the August case
 
-The gym closes 2–3 weeks in August. A member who wants 2–3 sessions in that
+The gym closes 2-3 weeks in August. A member who wants 2-3 sessions in that
 period should not carry a subscription for it.
 
 **Answer: a visit pack.** A plan with `billing_interval = 'one_time'` and
 `class_credits = 3`, priced for the period. Member pays cash, staff create the
-membership row, booking decrements credits normally. **Zero new schema** — this
+membership row, booking decrements credits normally. **Zero new schema** - this
 is the punch-card path the design already had. Members pausing a subscription
 put it on `hold` and hold a pack alongside it; the resolution order above
 decides which applies.
@@ -282,7 +286,7 @@ decides which applies.
 The rejected alternative was an "open tab": lift the monthly cap during a
 declared closure and accrue a per-visit charge staff settle at the end. More
 faithful to "he just shows up and pays", but it needs a closure-aware pricing
-concept and charge accrual — real machinery for a few weeks a year.
+concept and charge accrual - real machinery for a few weeks a year.
 
 **Consequence:** `memberships` is genuinely many-rows-per-user, not
 one-active-at-a-time. Already legal in the schema, but every entitlement query
@@ -304,39 +308,39 @@ there no class Tuesday" messages.
 
 - `docker-compose.yml` runs **Postgres only**; Next.js runs on the host via
   `npm run dev` (faster hot reload, no node_modules-in-container pain).
-- Port mapping is `host:container` — Postgres always listens on **5432**
+- Port mapping is `host:container` - Postgres always listens on **5432**
   inside the container, so `"1013:5432"` publishes it on host port 1013.
 - Postgres reads `POSTGRES_USER`/`POSTGRES_PASSWORD` **only on first init**.
   Changing them later requires `docker compose down -v` (wipes the volume).
-- Expo runs on the host and points at the local API — Docker not involved.
+- Expo runs on the host and points at the local API - Docker not involved.
 
 **Daily commands:** `up -d` (start), `ps` (check), `logs -f postgres`,
 `stop` / `down` (keep data), `down -v` (**deletes** data).
-`--build` is a no-op here — nothing is built from a Dockerfile yet.
+`--build` is a no-op here - nothing is built from a Dockerfile yet.
 
 ### Production (VPS)
 
-Same compose file plus **Caddy** (auto HTTPS, two lines of config — chosen over
+Same compose file plus **Caddy** (auto HTTPS, two lines of config - chosen over
 nginx for that reason). Deploy = pull/build image + `docker compose up -d`.
-A €10–20/month VPS (e.g. Hetzner) is far more than this needs.
+A €10-20/month VPS (e.g. Hetzner) is far more than this needs.
 
 Non-negotiables:
 
 - **Offsite backups.** Nightly `pg_dump` of the one database, shipped off the
   VPS (any S3-compatible store; Backblaze B2 costs cents). Test a restore
   before trusting it.
-- Postgres **not** published in production — the app reaches it over the
+- Postgres **not** published in production - the app reaches it over the
   internal Docker network.
 - Firewall: 80/443/SSH only. SSH keys only. Unattended security updates.
 
-The mobile app never touches the VPS — Expo/EAS builds it and the stores
+The mobile app never touches the VPS - Expo/EAS builds it and the stores
 distribute it; the server only serves the API.
 
 ### Git
 
 `master` = production, `develop` = integration, `feature/*` → `develop`.
 Confirm `.env.local` is gitignored before the first push.
-(Windows PowerShell 5.1 doesn't support `&&` — run commands one per line,
+(Windows PowerShell 5.1 doesn't support `&&` - run commands one per line,
 or install PowerShell 7 / use Git Bash.)
 
 ---
@@ -348,16 +352,38 @@ sign-up, no invite-accept flow. The only route into the database is an admin
 creating the account. The app has exactly one unauthenticated screen: the
 login form.
 
-- **Admins** are created directly by the gym owner as a database row — no UI,
+- **Admins** are created directly by the gym owner as a database row - no UI,
   no seeding script. `node lib/password.ts "the password"` prints a hash to
   paste into `users.password_hash`. There is no "promote to admin" button in
   the MVP: two roles and a handful of admins do not justify one.
 - **Members** are created by an admin on the members screen. The create form
   generates a random password and carries a **Send welcome email** checkbox.
   When it is ticked the member receives an email containing their email
-  address and that generated password.
+  address and that generated password. The generated password is never shown
+  in the dashboard: the email is the only way it reaches the member, which is
+  why the send has to happen inside the create action while the plaintext
+  still exists in memory. If it was never sent, an admin sets a fresh one with
+  the **New password** field on the update form, which leaves the existing
+  password alone when left blank.
 - **Changing the password is optional.** A member may change it from the
   mobile app; nothing forces them to.
+
+**Deleting a member is a real delete, refused when it would destroy history.**
+Two guards, in this order:
+
+1. **An active membership blocks it** - checked explicitly so the message can
+   say so: end the membership first.
+2. **Anything else that references the row blocks it too.** Six foreign keys
+   point at `users` (`bookings`, `memberships`, `payments` twice,
+   `class_sessions.coach_id`, `wods.created_by`), all `NO ACTION`, so the
+   `DELETE` raises `23503` and the action turns that into "has bookings,
+   payments or membership history and cannot be deleted" rather than a 500.
+
+The second guard is what stops attendance and payment records being orphaned;
+the first exists to give the common case a message that says what to do about
+it. An admin cannot delete their own account. A member with history who has
+left the gym is set to `status = 'inactive'` on the edit form instead - the
+column stays, and the login action still refuses inactive accounts.
 
 **The trade-off, recorded deliberately.** A generated password sent by email
 sits in the member's inbox indefinitely, and email is not a secure channel.
@@ -374,7 +400,7 @@ out of the MVP: recording whether the welcome email was sent
 (`welcome_email_sent_at`), password-reset links, and email verification. All
 three are additive later; none is needed to open the doors.
 
-**Still open — the email transport.** Nothing in the stack sends email yet.
+**Still open - the email transport.** Nothing in the stack sends email yet.
 Do not run a mail server on the VPS: deliverability is a full-time job and a
 fresh IP lands in spam. Two sane options, both a few lines of code. SMTP
 through the mailbox the gym already sends mail from (Google Workspace,
@@ -391,15 +417,23 @@ members screen ships.
 |---|---|---|
 | `db/migrations/001_init_schema.sql` | the schema, 8 tables | applied |
 | `db/migrations/002_drop_banned_status.sql` | `user_status` loses `banned` | applied |
+| `db/migrations/003_unique_lower_email.sql` | case-insensitive email uniqueness | applied |
+| `db/migrations/004_drop_emergency_contact.sql` | drops `users.emergency_contact` | applied |
 | `lib/db.ts` | single pool + `withTransaction` | done |
 | `scripts/migrate.mjs` | migration runner (`--dry-run`) | done |
 | `app/api/health/route.ts` | connectivity smoke test | done |
 | `app/page.tsx` | redirects to `/dashboard` | done |
 | `lib/password.ts` | scrypt hash/verify; run directly to mint a hash | done |
-| `lib/session.ts` | JWT cookie sign/verify, `requireAdmin()` — the real gate | done |
+| `lib/session.ts` | JWT cookie sign/verify, `requireAdmin()` - the real gate | done |
 | `lib/rate-limit.ts` | in-memory login throttle | done |
 | `proxy.ts` | optimistic route guard (Next 16 renamed `middleware`) | done |
 | `app/actions/auth.ts` | `login` / `logout` Server Actions | done |
+| `lib/members.ts` | member queries, id validation | done |
+| `app/actions/members.ts` | create / update / delete, with delete guards | done |
+| `app/(admin)/members/*` | list, view, create, update | done |
+| `components/member-form.tsx` | shared create/update form | done |
+| `components/members-toolbar.tsx` | live filters, reset, add | done |
+| `components/delete-member-button.tsx` | delete with confirm and guard messages | done |
 | `app/login/login-form.tsx` | client form, `useActionState` errors | done |
 | `app/login/page.tsx` | login card | done |
 | `app/(admin)/layout.tsx` | sidebar shell; deliberately holds **no** auth check | done |
@@ -413,14 +447,14 @@ members screen ships.
 re-render on client-side navigation, so a check there silently stops running
 after the first page load. `proxy.ts` does a cheap cookie check to keep logged
 -out users out, and every admin page and Server Action calls `requireAdmin()`
-itself — a Server Action is its own entry point and a page-level check does not
+itself - a Server Action is its own entry point and a page-level check does not
 cover it.
 
 **`lib/db.ts` notes:** the pool is cached on `globalThis` because Next.js
 hot-reload re-evaluates modules and would otherwise leak a new pool on every
 file save. `db()` is the entry point every API route starts from.
 
-**Migration runner note:** `pg` has no `multipleStatements` flag — multi-statement
+**Migration runner note:** `pg` has no `multipleStatements` flag - multi-statement
 strings work only over the simple query protocol, i.e. `client.query(sql)` with
 **no** parameter array. Send each file whole; never split on semicolons (the
 `$$`-quoted trigger body would shred). Postgres DDL is transactional, so
@@ -437,16 +471,18 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
 
 **MVP (web first):**
 
-1. **Done** — Local environment: Postgres in Docker, Next.js scaffolded
-2. **Done** — Schema + migration runner + connection manager + `/api/health`
-3. **Done** — **Auth**: login form wired, JWT session cookie, `proxy.ts` guard,
+1. **Done** - Local environment: Postgres in Docker, Next.js scaffolded
+2. **Done** - Schema + migration runner + connection manager + `/api/health`
+3. **Done** - **Auth**: login form wired, JWT session cookie, `proxy.ts` guard,
    `requireAdmin()`, login throttling, sign out
-4. **Next** — **Members**: create, edit and list; generated password and welcome email
-   (§10). Brings the email transport decision. Bookings need members to
-   exist, so this comes before the schedule.
-5. Schedule + bookings — capacity, waitlists, check-in, entitlement
+4. **Mostly done** - **Members**: paginated list (20 a page) with live
+   filtering, clickable rows, per-row view/update/delete actions, plus create
+   and update forms. Outstanding: the welcome email, which is blocked on the
+   transport decision in §10. Bookings need members to exist, so this comes
+   before the schedule.
+5. Schedule + bookings - capacity, waitlists, check-in, entitlement
    resolution; brings `settings`, `closures` and the session generator
-6. WODs — program, publish, show on the schedule
+6. WODs - program, publish, show on the schedule
 7. Manual payments dashboard, incl. the unpaid-bookings list
 
 **Then:** mobile app (Expo) → pull sync → scores + leaderboard (brings push sync with them) → push notifications → benchmarks.
@@ -458,7 +494,7 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
   hand-enter bookings for members who will never open the app.)
 - **Two roles only: `member` and `admin`.** No `coach` role. Admins run the web
   dashboard; members only ever use the mobile app. Authorisation is therefore
-  one check — "is this user an admin" — not a permission matrix. The login
+  one check - "is this user an admin" - not a permission matrix. The login
   action enforces it: a `member` who submits correct credentials on the web
   form is refused, and gets the same generic message as a wrong password.
   `class_sessions.coach_id` stays as "who is running this class", now pointing
@@ -472,7 +508,7 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
 
 - **The soft-delete columns above do not exist yet.** §4 says `wods`,
   `class_sessions` and `class_types` carry `deleted_at`, but `001` never added
-  it. Nothing can be deleted safely until it does — a hard delete lingers on
+  it. Nothing can be deleted safely until it does - a hard delete lingers on
   every device forever. Options: a `deleted_at` timestamp, or fold it into the
   existing `is_active` / `session_status` columns those tables already have.
   Decide before the mobile app ships; harmless while the MVP is web-only.

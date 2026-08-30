@@ -22,7 +22,7 @@ const MAXMEM = 64 * 1024 * 1024;
  * Returns `scrypt:N:r:p:salt:key`, salt and key base64.
  *
  * The cost parameters are stored in the string so they can be raised later
- * without invalidating hashes already in the database — verify reads the cost
+ * without invalidating hashes already in the database - verify reads the cost
  * from the stored value rather than assuming today's constants.
  */
 export async function hashPassword(password: string): Promise<string> {
@@ -43,6 +43,11 @@ export async function hashPassword(password: string): Promise<string> {
   ].join(":");
 }
 
+/** 12 base64url characters, ~72 bits. For staff-generated member passwords. */
+export function generatePassword(): string {
+  return randomBytes(9).toString("base64url");
+}
+
 export async function verifyPassword(
   password: string,
   stored: string,
@@ -61,18 +66,12 @@ export async function verifyPassword(
       KEY_LEN,
       { N: Number(n), r: Number(r), p: Number(p), maxmem: MAXMEM },
     );
-    // Both buffers are KEY_LEN, so timingSafeEqual cannot throw on length.
     return timingSafeEqual(key, candidate);
   } catch {
-    // Malformed or unsupported cost in the stored hash: not a match.
     return false;
   }
 }
 
-// Run directly to mint a hash for a row you are inserting by hand:
-//   node lib/password.ts "the password"
-// With no argument it self-checks instead.
-// import.meta.main is real in node 24 but absent from TypeScript's ImportMeta.
 if ((import.meta as { main?: boolean }).main) {
   const given = process.argv[2];
   if (given) {
@@ -88,7 +87,7 @@ if ((import.meta as { main?: boolean }).main) {
     check(!(await verifyPassword("wrong", hash)), "wrong password must fail");
     check(
       hash !== (await hashPassword(pw)),
-      "same password must hash differently — salt is not random",
+      "same password must hash differently - salt is not random",
     );
     check(!(await verifyPassword(pw, "garbage")), "malformed hash must fail");
     check(

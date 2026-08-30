@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Self-contained on purpose: proxy runs ahead of the render and should not pull
 // in the server-only session module. This is an optimistic check that only reads
-// the cookie — never a database call, because it runs on every request including
+// the cookie - never a database call, because it runs on every request including
 // link prefetches. The real gate is requireAdmin() in lib/session.ts.
 const SESSION_COOKIE = "session";
 
