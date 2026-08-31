@@ -8,6 +8,7 @@ import {
   Dumbbell,
   LayoutDashboard,
   LogOut,
+  Shapes,
   Tags,
   Users,
 } from "lucide-react";
@@ -28,10 +29,11 @@ import {
 const nav = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Members", href: "/members", icon: Users },
+  { title: "Memberships", href: "/memberships", icon: CreditCard },
   { title: "Plans", href: "/plans", icon: Tags },
   { title: "Schedule", href: "/schedule", icon: CalendarDays },
+  { title: "Class types", href: "/class-types", icon: Shapes },
   { title: "WODs", href: "/wods", icon: Dumbbell },
-  { title: "Memberships", href: "/memberships", icon: CreditCard },
 ];
 
 export function AppSidebar() {
@@ -50,7 +52,12 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     render={<Link href={item.href} />}
-                    isActive={pathname.startsWith(item.href)}
+                    // Exact, or a child route. A bare startsWith lit up
+                    // Members on /memberships, since that is a prefix.
+                    isActive={
+                      pathname === item.href ||
+                      pathname.startsWith(`${item.href}/`)
+                    }
                   >
                     <item.icon />
                     <span>{item.title}</span>
