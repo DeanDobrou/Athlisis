@@ -1,20 +1,14 @@
 "use client";
 
-import { CalendarIcon } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 
 import type { MemberFormState } from "@/app/actions/members";
+import { DateField } from "@/components/date-field";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
@@ -26,7 +20,6 @@ import {
 import type { Member } from "@/lib/members";
 
 const STATUS_ITEMS = { active: "Active", inactive: "Inactive" };
-const ROLE_ITEMS = { member: "Member", admin: "Admin" };
 
 export function MemberForm({
   action,
@@ -81,7 +74,15 @@ export function MemberForm({
         <Field id="phone" label="Phone">
           <Input id="phone" name="phone" defaultValue={member?.phone ?? ""} />
         </Field>
-        <DateOfBirthField defaultValue={member?.date_of_birth ?? ""} />
+        <DateField
+          name="date_of_birth"
+          label="Date of birth"
+          defaultValue={member?.date_of_birth ?? ""}
+          captionLayout="dropdown"
+          startMonth={new Date(1930, 0)}
+          endMonth={new Date()}
+          defaultMonth={new Date(1995, 0)}
+        />
       </div>
 
       {isUpdate && (
@@ -163,59 +164,6 @@ export function MemberForm({
         </Link>
       </div>
     </form>
-  );
-}
-
-function toISODate(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function DateOfBirthField({ defaultValue }: { defaultValue: string }) {
-  const [date, setDate] = useState<Date | undefined>(
-    defaultValue ? new Date(`${defaultValue}T00:00:00`) : undefined,
-  );
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor="date_of_birth_trigger">Date of birth</Label>
-      <input
-        type="hidden"
-        name="date_of_birth"
-        value={date ? toISODate(date) : ""}
-      />
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          id="date_of_birth_trigger"
-          render={
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full justify-between font-normal"
-            />
-          }
-        >
-          {date ? toISODate(date) : "Select a date"}
-          <CalendarIcon />
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={date}
-            onSelect={(picked) => {
-              setDate(picked);
-              setOpen(false);
-            }}
-            captionLayout="dropdown"
-            startMonth={new Date(1930, 0)}
-            endMonth={new Date()}
-            defaultMonth={date ?? new Date(1995, 0)}
-            autoFocus
-          />
-        </PopoverContent>
-      </Popover>
-    </div>
   );
 }
 

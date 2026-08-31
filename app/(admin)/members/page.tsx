@@ -1,8 +1,9 @@
-import { Eye, Pencil } from "lucide-react";
+﻿import { Eye, Pencil } from "lucide-react";
 import Link from "next/link";
 
 import { DeleteMemberButton } from "@/components/delete-member-button";
 import { MembersToolbar } from "@/components/members-toolbar";
+import { Pagination } from "@/components/pagination";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -36,8 +37,6 @@ export default async function MembersPage({
   const filter = await searchParams;
   const { rows, total, page, pageCount } = await listMembers(filter);
 
-  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const to = Math.min(page * PAGE_SIZE, total);
   const filtered = Boolean(filter.q || filter.status || filter.role);
 
   return (
@@ -141,53 +140,13 @@ export default async function MembersPage({
         </div>
       )}
 
-      {total > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-muted-foreground text-sm">
-            {from}-{to} of {total}
-          </p>
-          {pageCount > 1 && (
-            <div className="flex gap-2">
-              {page > 1 ? (
-                <Link
-                  href={pageHref(filter, page - 1)}
-                  className={buttonVariants({ variant: "outline" })}
-                >
-                  Previous
-                </Link>
-              ) : (
-                <span
-                  className={buttonVariants({
-                    variant: "outline",
-                    className: "pointer-events-none opacity-50",
-                  })}
-                  aria-disabled="true"
-                >
-                  Previous
-                </span>
-              )}
-              {page < pageCount ? (
-                <Link
-                  href={pageHref(filter, page + 1)}
-                  className={buttonVariants({ variant: "outline" })}
-                >
-                  Next
-                </Link>
-              ) : (
-                <span
-                  className={buttonVariants({
-                    variant: "outline",
-                    className: "pointer-events-none opacity-50",
-                  })}
-                  aria-disabled="true"
-                >
-                  Next
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      <Pagination
+        page={page}
+        pageCount={pageCount}
+        total={total}
+        pageSize={PAGE_SIZE}
+        href={(n) => pageHref(filter, n)}
+      />
     </div>
   );
 }

@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { db } from "@/lib/db";
+import { db, hasPgCode } from "@/lib/db";
 import { parseMemberId } from "@/lib/members";
+import { countMemberships, hasCoverageToday } from "@/lib/memberships";
 import { generatePassword, hashPassword } from "@/lib/password";
 import { requireAdmin } from "@/lib/session";
 
@@ -32,15 +33,6 @@ function validate(f: Fields): string | null {
     return "Enter a valid email address.";
   }
   return null;
-}
-
-function hasPgCode(err: unknown, code: string): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: string }).code === code
-  );
 }
 
 const isDuplicateEmail = (err: unknown) => hasPgCode(err, "23505");
@@ -173,14 +165,16 @@ export async function deleteMember(
     return { error: "You cannot delete your own account." };
   }
 
-  const { rows } = await db().query<{ count: string }>(
-    "SELECT count(*) AS count FROM memberships WHERE user_id = $1 AND status = 'active'",
-    [id],
-  );
-  if (Number(rows[0].count) > 0) {
+  if (await hasCoverageToday(id)) {
     return {
       error:
-        "This member has an active membership and cannot be deleted. End the membership first.",
+        "This member has an active membership and cannot be deleted. Set it to inactive or delete it first.",
+    };
+  }
+  if (await countMemberships(id)) {
+    return {
+      error:
+        "This member has membership history and cannot be deleted. Delete their memberships first.",
     };
   }
 
@@ -190,8 +184,6 @@ export async function deleteMember(
     ]);
     if (rowCount === 0) return { error: "Unknown member." };
   } catch (err) {
-    // Other tables reference users. Deleting through them would destroy
-    // attendance and payment history, so the delete is refused instead.
     if (isStillReferenced(err)) {
       return {
         error:

@@ -13,6 +13,23 @@ export function db(): Pool {
   return globalForDb.pool;
 }
 
+export function hasPgCode(err: unknown, code: string): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === code
+  );
+}
+
+/**
+ * Escapes an ILIKE pattern so a user searching for "50%" or "a_b" gets those
+ * characters literally instead of wildcards. Pair with ESCAPE '\' in the SQL.
+ */
+export function likeLiteral(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
 /**
  * Run `fn` inside a transaction on a dedicated client, committing on success
  * and rolling back on any throw.

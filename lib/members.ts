@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db } from "@/lib/db";
+import { db, likeLiteral } from "@/lib/db";
 import type { Role } from "@/lib/session";
 
 export type MemberStatus = "active" | "inactive";
@@ -42,9 +42,10 @@ export async function listMembers(filter: MemberFilter): Promise<MemberPage> {
   const values: unknown[] = [];
 
   if (filter.q) {
-    values.push(`%${filter.q}%`);
+    values.push(`%${likeLiteral(filter.q)}%`);
     where.push(
-      `((first_name || ' ' || last_name) ILIKE $${values.length} OR email ILIKE $${values.length})`,
+      `((first_name || ' ' || last_name) ILIKE $${values.length} ESCAPE '\\'
+        OR email ILIKE $${values.length} ESCAPE '\\')`,
     );
   }
   if (filter.status === "active" || filter.status === "inactive") {
@@ -56,17 +57,34 @@ export async function listMembers(filter: MemberFilter): Promise<MemberPage> {
     where.push(`role::text = $${values.length}`);
   }
 
-  const page = Math.max(1, Math.floor(Number(filter.page)) || 1);
-  values.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+  const from = `FROM users
+     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`;
 
-  const { rows } = await db().query<Member & { total: string }>(
-    `SELECT ${COLUMNS}, count(*) OVER () AS total
-     FROM users
-     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-     ORDER BY last_name, first_name
-     LIMIT $${values.length - 1} OFFSET $${values.length}`,
-    values,
-  );
+  const fetchPage = async (p: number) => {
+    const { rows } = await db().query<Member & { total: string }>(
+      `SELECT ${COLUMNS}, count(*) OVER () AS total
+       ${from}
+       ORDER BY last_name, first_name
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, PAGE_SIZE, (p - 1) * PAGE_SIZE],
+    );
+    return rows;
+  };
+
+  let page = Math.max(1, Math.floor(Number(filter.page)) || 1);
+  let rows = await fetchPage(page);
+
+  if (rows.length === 0 && page > 1) {
+    const { rows: counted } = await db().query<{ total: string }>(
+      `SELECT count(*) AS total ${from}`,
+      values,
+    );
+    const found = Number(counted[0].total);
+    if (found > 0) {
+      page = Math.ceil(found / PAGE_SIZE);
+      rows = await fetchPage(page);
+    }
+  }
 
   const total = rows.length > 0 ? Number(rows[0].total) : 0;
   return {
@@ -91,4 +109,11 @@ export async function getMember(rawId: string): Promise<Member | null> {
     [id],
   );
   return rows[0] ?? null;
+}
+
+export async function listAllMembers(): Promise<Member[]> {
+  const { rows } = await db().query<Member>(
+    `SELECT ${COLUMNS} FROM users ORDER BY last_name, first_name`,
+  );
+  return rows;
 }

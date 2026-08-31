@@ -8,6 +8,7 @@ import {
   Dumbbell,
   LayoutDashboard,
   LogOut,
+  Tags,
   Users,
 } from "lucide-react";
 
@@ -27,9 +28,10 @@ import {
 const nav = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Members", href: "/members", icon: Users },
+  { title: "Plans", href: "/plans", icon: Tags },
   { title: "Schedule", href: "/schedule", icon: CalendarDays },
   { title: "WODs", href: "/wods", icon: Dumbbell },
-  { title: "Payments", href: "/payments", icon: CreditCard },
+  { title: "Memberships", href: "/memberships", icon: CreditCard },
 ];
 
 export function AppSidebar() {

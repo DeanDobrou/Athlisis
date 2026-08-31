@@ -86,7 +86,7 @@ get a one-row `settings` table in the migration that brings bookings.
 | # | Table | Purpose |
 |---|---|---|
 | 1 | `users` | members and admins (role enum) |
-| 2 | `plans` | membership products; `one_time` + `class_credits` = visit pack |
+| 2 | `plans` | membership products; `one_time` + `visits` = visit pack |
 | 3 | `memberships` | user ↔ plan; a user may hold several (see §8) |
 | 4 | `class_types` | WOD, Open Gym, Foundations (seeded) |
 | 5 | `class_sessions` | a concrete class on the calendar |
@@ -118,14 +118,14 @@ work is not lost - see "Scores, when they return" below.
 - **Unique (user, session)** on bookings. Cancel-then-rebook is therefore an
   `UPDATE`, so the booking service is upsert-shaped - there is never a second
   row.
-- **`bookings.entitlement_source`** (`subscription` | `credit` | `unpaid`)
+- **`bookings.entitlement_source`** (`subscription` | `visit` | `unpaid`)
   records *how* each booking was paid for. Without it you cannot tell which
-  bookings owe money, and cancellation cannot know whether to refund a credit.
+  bookings owe money, and cancellation cannot know whether to refund a visit.
 - **Capacity is not a DB constraint** - it is a count across rows. The booking
   transaction must `SELECT ... FOR UPDATE` the session row, or concurrent
   requests will oversell the class. Entitlement resolution happens in that
   same transaction.
-- **Guard rails that cost nothing:** no negative credits, no zero-or-negative
+- **Guard rails that cost nothing:** no negative visits, no zero-or-negative
   capacity, and `ends_at > starts_at` on every session.
 - **Waitlist position is derived, not stored.** `ROW_NUMBER() OVER (PARTITION
   BY class_session_id ORDER BY booked_at)` over waitlisted rows. A stored
@@ -237,11 +237,57 @@ window is minutes.
 ## 8. Paying for a booking
 
 **There is no payment processor.** Staff record payments by hand (default
-method `cash`), renewals are marked manually, and `past_due` is set by hand
-rather than by a webhook. The Stripe columns that once sat unused were
-dropped - adding a processor later is an additive `ALTER TABLE ADD COLUMN`,
-which §6 rule 3 already permits, so there was nothing to gain by carrying
-five dead columns.
+method `cash`) and renewals are marked manually. The Stripe columns that once
+sat unused were dropped - adding a processor later is an additive
+`ALTER TABLE ADD COLUMN`, which §6 rule 3 already permits, so there was
+nothing to gain by carrying five dead columns.
+
+**The membership period is the source of truth for coverage**, not the payment
+history. One predicate decides it, `coversDate()` in `lib/memberships.ts`, and
+all three columns matter:
+
+```sql
+status = 'active' AND starts_on <= <date>
+  AND (ends_on IS NULL OR ends_on >= <date>)
+```
+
+`ends_on` is derived from the plan, never typed: a monthly plan runs to the
+same day of the next month (10 March to 10 April), and Postgres clamps the
+short months, so 31 January becomes 28 February. A `one_time` visit pack has
+no end date at all - it is consumed by count. `visits_remaining` is seeded from
+`plans.visits` the same way, and a blank field on the update form re-seeds from
+the plan rather than writing NULL, which would silently mean unlimited.
+
+**Everything the app calls "today" means today in Athens.** The Postgres
+container defaults to UTC and Greece is UTC+3 in summer, so between midnight
+and 03:00 local `current_date` was still yesterday: for three hours every night
+a membership that had ended still read Active, and one starting that morning
+read Scheduled. Migration `009` pins the timezone on the database itself, so it
+survives a container rebuild and applies to `psql` and the app alike;
+`docker-compose.yml` sets `TZ`/`PGTZ` to match on a fresh container. On the
+app side `todayInGym()` in `lib/gym-time.ts` asks for the date in an explicit
+zone, which also stops a server-rendered date default disagreeing with its
+browser hydration when the two machines sit in different zones.
+
+Both ends are inclusive, so a renewal starting on the exact end date would
+share that one day. Renewals are recorded by hand whenever the member next
+pays, which is rarely the day the last period ended, so periods in practice
+have gaps rather than overlaps and the boundary is not worth engineering
+around. Revisit if renewal is ever automated.
+
+**The grid shows a derived state, not the stored status.** One column,
+computed on every read by `membershipState()`, from the same three columns:
+`Active`, `Completed` (period passed), `Scheduled` (not begun), `Inactive`
+(set by staff). `active` is exactly `coversDate()` being true, by construction,
+so the badge and the booking service can never disagree. Nothing writes it, so
+there is no nightly job to run and nothing to go stale - a membership reads as
+Completed the morning after its period ends, on its own.
+
+**`membership_status` is `active` / `inactive` only** (migration `007`).
+`on_hold`, `past_due` and `expired` were all read as "not active" by the rule
+above, which made them labels rather than behaviour - `past_due` now falls out
+of `ends_on` being in the past. Stripe subscription states can be added back
+with `ALTER TYPE ... ADD VALUE` when there is a webhook to set them.
 
 ### Entitlement resolution
 
@@ -249,12 +295,12 @@ Every member is a member; the only question is what covers *this* booking.
 Resolved inside the booking transaction, in this order:
 
 1. **Active subscription** covering the session date, unlimited → book.
-2. **Credits remaining** on an active plan → decrement, book.
+2. **Visits remaining** on an active plan → decrement, book.
 3. **Neither** → an **unpaid** booking, allowed only if the member has no other
    unpaid booking in the same calendar month.
 
 The order matters: check subscription *first*, or a member holding both a
-subscription and a leftover visit pack silently burns pack credits.
+subscription and a leftover visit pack silently burns pack visits.
 
 **The one-unpaid-per-month allowance** is the grace slot - a member can book
 before settling up, once per month. Enforced in the service layer, not as a DB
@@ -264,9 +310,34 @@ onto bookings and risking drift when a session is rescheduled. The transaction
 already needed for capacity is the right place. The allowance lives in
 `settings` so it can be changed without a deploy.
 
-**Cancellation** reads `entitlement_source`: a `credit` booking returns the
-credit, an `unpaid` one frees the monthly slot, a `subscription` one does
+**Cancellation** reads `entitlement_source`: a `visit` booking returns the
+visit, an `unpaid` one frees the monthly slot, a `subscription` one does
 nothing.
+
+### Visit pacing: one hard rule, one soft one
+
+The monthly visit count is the budget. A 12-visit plan sold as "3 times a
+week" is deliberately semi-strict: a member who trains twice this week has 10
+left and may train four times next week. Note that 3/week over an average
+month is about 13, so **the monthly count already bites before the weekly rate
+does** - a weekly cap on top would enforce a limit stricter than the one being
+charged for. Two rules instead:
+
+- **One booking per member per calendar day - hard, refused.** Nobody attends
+  two classes in a day. Enforced in the booking transaction beside the capacity
+  check, not as a unique index: the day comes from `class_sessions.starts_at`,
+  so an index would mean denormalising the date onto `bookings` and risking
+  drift when a session is rescheduled - the same reasoning as the monthly
+  allowance above.
+- **More than 3 bookings in a rolling 7 days - soft, flagged.** The booking
+  still goes through; the member appears in a **Dashboard table** so staff can
+  see who is pacing hot. A flag, not a block, because the budget already caps
+  the month and a hard weekly cap would punish someone catching up after
+  missing a week. The threshold belongs in `settings` so it can change without
+  a deploy.
+
+Both need `bookings` rows to exist, so both are built with the booking service
+in step 5, not before.
 
 **Staff view:** a dashboard list of members with unpaid bookings. Without it
 the grace slot is leakage rather than a convenience.
@@ -277,10 +348,10 @@ The gym closes 2-3 weeks in August. A member who wants 2-3 sessions in that
 period should not carry a subscription for it.
 
 **Answer: a visit pack.** A plan with `billing_interval = 'one_time'` and
-`class_credits = 3`, priced for the period. Member pays cash, staff create the
-membership row, booking decrements credits normally. **Zero new schema** - this
-is the punch-card path the design already had. Members pausing a subscription
-put it on `hold` and hold a pack alongside it; the resolution order above
+`visits = 3`, priced for the period. Member pays cash, staff create the
+membership row, booking decrements visits normally. **Zero new schema** - this
+is the punch-card path the design already had. A member pausing a subscription
+sets it to `inactive` and holds a pack alongside it; the resolution order above
 decides which applies.
 
 The rejected alternative was an "open tab": lift the monthly cap during a
