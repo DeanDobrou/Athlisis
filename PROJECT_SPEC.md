@@ -363,13 +363,23 @@ concept and charge accrual - real machinery for a few weeks a year.
 one-active-at-a-time. Already legal in the schema, but every entitlement query
 must assume it, and the dashboard shows coverage as a list, not a single badge.
 
-### `closures`
+### `closures` - deferred, not built
 
-A small table in `002`: start date, end date, reason, optional note shown in
-the app. It stops the session generator creating classes on closed days, tells
-members why the schedule is empty, and gives the August period a name that
-reporting can group by. Four columns that remove a whole category of "why is
-there no class Tuesday" messages.
+Originally planned as a table (start date, end date, reason, note). It was
+never created, and on reflection it is not needed yet: **an empty day is a
+closed day.** The schedule greys those days and labels them "No classes",
+which takes no stored data, because the page already knows a day has nothing
+on it.
+
+The generator does not need it either. "Copy last week" is pressed per week by
+a human, so a closed week is simply one nobody copies into.
+
+What a table would add is a *reason* - "Closed 1-21 August" rather than
+"No classes" - plus a name for reporting to group by. Both matter only once
+**members** see the schedule in the mobile app, where a blank week is
+ambiguous between "the gym is shut" and "next week is not published yet". To
+an admin looking at their own schedule it never is. Revisit with the mobile
+app; adding the table then is additive and breaks nothing.
 
 ---
 

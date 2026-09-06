@@ -26,6 +26,7 @@ export function DateField({
   label,
   defaultValue = "",
   placeholder = "Select a date",
+  disabled,
   startMonth,
   endMonth,
   defaultMonth,
@@ -35,6 +36,8 @@ export function DateField({
   label: string;
   defaultValue?: string;
   placeholder?: string;
+  /** Passed through to the calendar, eg { dayOfWeek: [0, 6] } for weekends. */
+  disabled?: React.ComponentProps<typeof Calendar>["disabled"];
   startMonth?: Date;
   endMonth?: Date;
   defaultMonth?: Date;
@@ -69,6 +72,7 @@ export function DateField({
               setDate(picked);
               setOpen(false);
             }}
+            disabled={disabled}
             captionLayout={captionLayout}
             startMonth={startMonth}
             endMonth={endMonth}
