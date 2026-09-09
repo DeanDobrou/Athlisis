@@ -22,6 +22,20 @@ export function todayInGym(now = new Date()): string {
   }).format(now);
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Whether a YYYY-MM-DD string names a day that exists. The shape check alone
+ * would pass 2026-02-31, which Postgres then rejects mid-statement as an
+ * unhandled 500. Round-tripping through Date catches it, because JS rolls the
+ * day over to 3 March and the string no longer matches.
+ */
+export function isRealDate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
 /**
  * Date-only arithmetic, done in UTC on purpose. These values carry no time,
  * so using UTC internally means a DST changeover cannot shift a day: adding 1

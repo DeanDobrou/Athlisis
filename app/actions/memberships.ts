@@ -5,26 +5,13 @@ import { redirect } from "next/navigation";
 
 import { db, hasPgCode } from "@/lib/db";
 import { isMembershipStatus } from "@/lib/enums";
+import { isRealDate } from "@/lib/gym-time";
 import { parseMemberId } from "@/lib/members";
 import { parseMembershipId, periodEndsOn } from "@/lib/memberships";
 import { parsePlanId } from "@/lib/plans";
 import { requireAdmin } from "@/lib/session";
 
 export type MembershipFormState = { error: string } | undefined;
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * The shape check alone would pass 2026-02-31, which Postgres then rejects
- * mid-statement as an unhandled 500. Round-tripping through Date catches a day
- * that does not exist, because JS rolls it over to 3 March and the string no
- * longer matches.
- */
-function isRealDate(value: string): boolean {
-  if (!ISO_DATE.test(value)) return false;
-  const d = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
-}
 
 type ParsedMembership = {
   userId: number;

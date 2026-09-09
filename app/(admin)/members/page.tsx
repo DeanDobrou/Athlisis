@@ -1,4 +1,4 @@
-﻿import { Eye, Pencil } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
 import Link from "next/link";
 
 import { DeleteMemberButton } from "@/components/delete-member-button";
