@@ -31,6 +31,24 @@ export function likeLiteral(value: string): string {
 }
 
 /**
+ * Normalises Greek for search, and must wrap *both* sides of an ILIKE or it
+ * makes matching worse rather than better.
+ *
+ * Two things go wrong comparing Greek literally. Accents: people type "μαρια"
+ * for Μαρία, and Greek capitals drop the tonos anyway, so ΜΑΡΙΑ never matches
+ * an accented search. unaccent (migration 015) settles that. Final sigma:
+ * Postgres lowercases Σ to the medial σ, never the final ς, so a name stored
+ * in capitals folds to "γιωργοσ" and misses "γιωργος" as it would really be
+ * typed. translate settles that.
+ *
+ * `expr` is a column expression or placeholder supplied by the caller, never
+ * user input.
+ */
+export function greekFold(expr: string): string {
+  return `translate(unaccent(${expr}), 'ς', 'σ')`;
+}
+
+/**
  * Run `fn` inside a transaction on a dedicated client, committing on success
  * and rolling back on any throw.
  *

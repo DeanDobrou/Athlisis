@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db, likeLiteral } from "@/lib/db";
+import { db, greekFold, likeLiteral } from "@/lib/db";
 import type { Role } from "@/lib/session";
 
 export type MemberStatus = "active" | "inactive";
@@ -43,8 +43,11 @@ export async function listMembers(filter: MemberFilter): Promise<MemberPage> {
 
   if (filter.q) {
     values.push(`%${likeLiteral(filter.q)}%`);
+    // Both sides go through greekFold: accents and final sigma make a
+    // literal ILIKE miss how Greek names are really typed and stored. The
+    // email half stays literal, since addresses are ASCII.
     where.push(
-      `((first_name || ' ' || last_name) ILIKE $${values.length} ESCAPE '\\'
+      `(${greekFold("first_name || ' ' || last_name")} ILIKE ${greekFold(`$${values.length}`)} ESCAPE '\\'
         OR email ILIKE $${values.length} ESCAPE '\\')`,
     );
   }
