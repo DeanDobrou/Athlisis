@@ -31,7 +31,7 @@ export default async function UpdateSessionPage({
         session={session}
         defaultDay={session.day}
         defaultCapacity={session.capacity}
-        submitLabel="Save class"
+        submitLabel="Αποθήκευση μαθήματος"
       />
     </div>
   );

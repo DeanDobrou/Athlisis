@@ -32,11 +32,11 @@ function parseFields(formData: FormData): ParsedSession | { error: string } {
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
   const day = get("day");
-  if (!isRealDate(day)) return { error: "Pick a date." };
+  if (!isRealDate(day)) return { error: "Διάλεξε ημερομηνία." };
   // The calendar already greys these out, but a server action is its own
   // entry point and cannot rely on the form having done it.
   if (isWeekend(day)) {
-    return { error: "The gym does not run classes at the weekend." };
+    return { error: "Το γυμναστήριο δεν έχει μαθήματα το Σαββατοκύριακο." };
   }
 
   // Any real time is accepted, not only one of SLOTS. The slot buttons are the
@@ -45,16 +45,16 @@ function parseFields(formData: FormData): ParsedSession | { error: string } {
   const startTime = get("start_time");
   const endTime = get("end_time");
   if (!HH_MM.test(startTime) || !HH_MM.test(endTime)) {
-    return { error: "Enter times as HH:MM." };
+    return { error: "Δώσε τις ώρες σε μορφή HH:MM." };
   }
   // String comparison is safe: both are zero-padded 24-hour times.
   if (endTime <= startTime) {
-    return { error: "The class has to end after it starts." };
+    return { error: "Το μάθημα πρέπει να τελειώνει μετά την έναρξή του." };
   }
 
   const capacity = Number(get("capacity"));
   if (!Number.isSafeInteger(capacity) || capacity < 1) {
-    return { error: "Capacity must be a whole number above zero." };
+    return { error: "Η χωρητικότητα πρέπει να είναι ακέραιος μεγαλύτερος του μηδενός." };
   }
 
   const status = get("status") === "cancelled" ? "cancelled" : "scheduled";
@@ -64,7 +64,7 @@ function parseFields(formData: FormData): ParsedSession | { error: string } {
     .map((v) => Number(String(v)))
     .filter((n) => Number.isSafeInteger(n) && n > 0);
   if (typeIds.length === 0) {
-    return { error: "Choose at least one class type." };
+    return { error: "Διάλεξε τουλάχιστον έναν τύπο μαθήματος." };
   }
 
   return {
@@ -122,7 +122,7 @@ export async function updateSession(
   await requireAdmin();
 
   const id = parseSessionId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown session." };
+  if (id === null) return { error: "Άγνωστο μάθημα." };
 
   const f = parseFields(formData);
   if ("error" in f) return f;
@@ -150,7 +150,7 @@ export async function updateSession(
     );
     return true;
   });
-  if (!found) return { error: "Unknown session." };
+  if (!found) return { error: "Άγνωστο μάθημα." };
 
   revalidatePath("/schedule");
   redirect(`/schedule?week=${f.day}`);
@@ -171,7 +171,7 @@ export async function copySession(
   await requireAdmin();
 
   const id = parseSessionId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown class." };
+  if (id === null) return { error: "Άγνωστο μάθημα." };
 
   const result = await withTransaction(async (client) => {
     const { rows: found } = await client.query<{
@@ -186,7 +186,7 @@ export async function copySession(
        FROM class_sessions WHERE id = $1`,
       [id],
     );
-    if (found.length === 0) return { error: "Unknown class." };
+    if (found.length === 0) return { error: "Άγνωστο μάθημα." };
     const source = found[0];
 
     const { rows: siblings } = await client.query<{ start_time: string }>(
@@ -199,7 +199,7 @@ export async function copySession(
     const taken = new Set(siblings.map((s) => s.start_time));
     const target = nextFreeSlot(taken, slotIndex(source.start_time));
     if (!target) {
-      return { error: "All slots are covered for that day." };
+      return { error: "Όλες οι ώρες είναι ήδη καλυμμένες για εκείνη την ημέρα." };
     }
 
     const { rows: created } = await client.query<{ id: string }>(
@@ -246,7 +246,7 @@ export async function copyLastWeek(
   await requireAdmin();
 
   const week = String(formData.get("week") ?? "");
-  if (!isRealDate(week)) return { error: "Unknown week." };
+  if (!isRealDate(week)) return { error: "Άγνωστη εβδομάδα." };
 
   const result = await withTransaction(async (client) => {
     const { rows: source } = await client.query<{
@@ -268,7 +268,7 @@ export async function copyLastWeek(
       [addDays(week, -7), TRAINING_DAYS],
     );
     if (source.length === 0) {
-      return { error: "The week before has no classes to copy." };
+      return { error: "Η προηγούμενη εβδομάδα δεν έχει μαθήματα για αντιγραφή." };
     }
 
     const { rows: occupied } = await client.query<{
@@ -306,7 +306,7 @@ export async function copyLastWeek(
 
     const skipped = source.length - added;
     if (added === 0) {
-      return { message: "This week already matches the one before." };
+      return { message: "Αυτή η εβδομάδα είναι ήδη ίδια με την προηγούμενη." };
     }
     return {
       message:
@@ -329,7 +329,7 @@ export async function deleteSession(
   await requireAdmin();
 
   const id = parseSessionId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown session." };
+  if (id === null) return { error: "Άγνωστο μάθημα." };
 
   const week = String(formData.get("week") ?? "");
 
@@ -339,7 +339,7 @@ export async function deleteSession(
     "DELETE FROM class_sessions WHERE id = $1",
     [id],
   );
-  if (rowCount === 0) return { error: "Unknown session." };
+  if (rowCount === 0) return { error: "Άγνωστο μάθημα." };
 
   revalidatePath("/schedule");
   redirect(week ? `/schedule?week=${week}` : "/schedule");

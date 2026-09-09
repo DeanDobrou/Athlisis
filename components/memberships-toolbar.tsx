@@ -20,7 +20,7 @@ type Filters = { q: string; state: string; plan: string };
 
 const ANY = "all";
 
-const STATE_ITEMS = { [ANY]: "State", ...MEMBERSHIP_STATES };
+const STATE_ITEMS = { [ANY]: "Κατάσταση", ...MEMBERSHIP_STATES };
 
 export function MembershipsToolbar({
   q,
@@ -38,7 +38,7 @@ export function MembershipsToolbar({
   useEffect(() => () => clearTimeout(debounce.current), []);
 
   const planItems = {
-    [ANY]: "Plan",
+    [ANY]: "Πακέτο",
     ...Object.fromEntries(plans.map((p) => [p.id, p.name])),
   };
 
@@ -78,13 +78,13 @@ export function MembershipsToolbar({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Memberships</h1>
+        <h1 className="text-2xl font-semibold">Συνδρομές</h1>
         <div className="flex gap-2">
           <Button variant="outline" onClick={reset} disabled={!hasFilters}>
-            Reset filters
+            Καθαρισμός φίλτρων
           </Button>
           <Link href="/memberships/create" className={buttonVariants()}>
-            Add membership
+            Νέα συνδρομή
           </Link>
         </div>
       </div>
@@ -96,8 +96,8 @@ export function MembershipsToolbar({
         <Input
           value={filters.q}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name or email"
-          aria-label="Search memberships"
+          placeholder="Αναζήτηση ονόματος ή email"
+          aria-label="Αναζήτηση συνδρομών"
           className="min-w-56 flex-1"
         />
         <Select
@@ -111,7 +111,7 @@ export function MembershipsToolbar({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>All plans</SelectItem>
+            <SelectItem value={ANY}>Όλα τα πακέτα</SelectItem>
             {plans.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name}
@@ -130,7 +130,7 @@ export function MembershipsToolbar({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>All states</SelectItem>
+            <SelectItem value={ANY}>Όλες οι καταστάσεις</SelectItem>
             {Object.entries(MEMBERSHIP_STATES).map(([value, label]) => (
               <SelectItem key={value} value={value}>
                 {label}

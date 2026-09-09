@@ -26,7 +26,7 @@ export function DeleteClassTypeButton({
       <form
         action={formAction}
         onSubmit={(e) => {
-          if (!confirm(`Delete ${name}? This cannot be undone.`)) {
+          if (!confirm(`Διαγραφή ${name}; Η ενέργεια δεν αναιρείται.`)) {
             e.preventDefault();
           }
         }}
@@ -37,8 +37,8 @@ export function DeleteClassTypeButton({
           variant="ghost"
           size="icon-sm"
           disabled={pending}
-          aria-label={`Delete ${name}`}
-          title={`Delete ${name}`}
+          aria-label={`Διαγραφή ${name}`}
+          title={`Διαγραφή ${name}`}
         >
           <Trash2 className="text-destructive" />
         </Button>

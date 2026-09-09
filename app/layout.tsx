@@ -9,7 +9,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Athlisis",
-  description: "Gym administration",
+  description: "Διαχείριση γυμναστηρίου",
 };
 
 export default function RootLayout({
@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    <html lang="el" className={`${inter.variable} h-full antialiased`}>
       {/* suppressHydrationWarning - extensions inject body attrs (cz-shortcut-listen) */}
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}

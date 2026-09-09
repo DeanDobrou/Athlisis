@@ -22,11 +22,11 @@ function parseFields(
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
   const name = get("name").slice(0, 100);
-  if (!name) return { error: "A name is required." };
+  if (!name) return { error: "Το όνομα είναι υποχρεωτικό." };
 
   const colorHex = get("color_hex");
   if (colorHex && !HEX_COLOR.test(colorHex)) {
-    return { error: "Pick a colour." };
+    return { error: "Διάλεξε χρώμα." };
   }
 
   return { name, colorHex: colorHex ? colorHex.toUpperCase() : null };
@@ -57,7 +57,7 @@ export async function updateClassType(
   await requireAdmin();
 
   const id = parseClassTypeId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown class type." };
+  if (id === null) return { error: "Άγνωστος τύπος μαθήματος." };
 
   const f = parseFields(formData);
   if ("error" in f) return f;
@@ -66,7 +66,7 @@ export async function updateClassType(
     "UPDATE class_types SET name = $1, color_hex = $2 WHERE id = $3",
     [f.name, f.colorHex, id],
   );
-  if (rowCount === 0) return { error: "Unknown class type." };
+  if (rowCount === 0) return { error: "Άγνωστος τύπος μαθήματος." };
 
   revalidatePath("/class-types");
   redirect("/class-types");
@@ -81,21 +81,21 @@ export async function deleteClassType(
   await requireAdmin();
 
   const id = parseClassTypeId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown class type." };
+  if (id === null) return { error: "Άγνωστος τύπος μαθήματος." };
 
   try {
     const { rowCount } = await db().query(
       "DELETE FROM class_types WHERE id = $1",
       [id],
     );
-    if (rowCount === 0) return { error: "Unknown class type." };
+    if (rowCount === 0) return { error: "Άγνωστος τύπος μαθήματος." };
   } catch (err) {
     // class_sessions and wods both point here. Deleting through them would
     // erase what a class on the schedule actually was.
     if (hasPgCode(err, "23503")) {
       return {
         error:
-          "This class type is used by sessions or WODs and cannot be deleted.",
+          "Ο τύπος μαθήματος χρησιμοποιείται σε μαθήματα ή WOD και δεν μπορεί να διαγραφεί.",
       };
     }
     throw err;

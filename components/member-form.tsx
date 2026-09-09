@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import type { Member } from "@/lib/members";
 
-const STATUS_ITEMS = { active: "Active", inactive: "Inactive" };
+const STATUS_ITEMS = { active: "Ενεργό", inactive: "Ανενεργό" };
 
 export function MemberForm({
   action,
@@ -41,7 +41,7 @@ export function MemberForm({
       {member && <input type="hidden" name="id" value={member.id} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="first_name" label="First name">
+        <Field id="first_name" label="Όνομα">
           <Input
             id="first_name"
             name="first_name"
@@ -49,7 +49,7 @@ export function MemberForm({
             required
           />
         </Field>
-        <Field id="last_name" label="Last name">
+        <Field id="last_name" label="Επώνυμο">
           <Input
             id="last_name"
             name="last_name"
@@ -71,12 +71,12 @@ export function MemberForm({
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="phone" label="Phone">
+        <Field id="phone" label="Τηλέφωνο">
           <Input id="phone" name="phone" defaultValue={member?.phone ?? ""} />
         </Field>
         <DateField
           name="date_of_birth"
-          label="Date of birth"
+          label="Ημερομηνία γέννησης"
           defaultValue={member?.date_of_birth ?? ""}
           captionLayout="dropdown"
           startMonth={new Date(1930, 0)}
@@ -86,19 +86,19 @@ export function MemberForm({
       </div>
 
       {isUpdate && (
-        <Field id="password" label="New password">
+        <Field id="password" label="Νέος κωδικός">
           <Input
             id="password"
             name="password"
             type="password"
             autoComplete="new-password"
-            placeholder="Leave blank to keep the current one"
+            placeholder="Άφησέ το κενό για να μείνει ο ίδιος"
           />
         </Field>
       )}
 
       <div className="grid gap-2">
-        <span className="text-sm font-medium">Role</span>
+        <span className="text-sm font-medium">Ρόλος</span>
         <RadioGroup
           name="role"
           defaultValue={member?.role ?? "member"}
@@ -106,17 +106,17 @@ export function MemberForm({
         >
           <Label htmlFor="role_member" className="flex items-center gap-2">
             <RadioGroupItem id="role_member" value="member" />
-            Member
+            Μέλος
           </Label>
           <Label htmlFor="role_admin" className="flex items-center gap-2">
             <RadioGroupItem id="role_admin" value="admin" />
-            Admin
+            Διαχειριστής
           </Label>
         </RadioGroup>
       </div>
 
       {isUpdate ? (
-        <Field id="status" label="Status">
+        <Field id="status" label="Κατάσταση">
           <Select
             name="status"
             items={STATUS_ITEMS}
@@ -126,8 +126,8 @@ export function MemberForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="active">Ενεργό</SelectItem>
+              <SelectItem value="inactive">Ανενεργό</SelectItem>
             </SelectContent>
           </Select>
         </Field>
@@ -138,7 +138,7 @@ export function MemberForm({
             className="flex items-center gap-2"
           >
             <Checkbox id="send_welcome_email" name="send_welcome_email" />
-            Send welcome email
+            Αποστολή email καλωσορίσματος
           </Label>
           <p className="text-muted-foreground text-xs">
             Email sending is not configured yet, so nothing is sent for now.
@@ -154,13 +154,13 @@ export function MemberForm({
 
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
-          {pending ? "Saving..." : submitLabel}
+          {pending ? "Αποθήκευση..." : submitLabel}
         </Button>
         <Link
           href="/members"
           className={buttonVariants({ variant: "outline" })}
         >
-          Cancel
+          Άκυρο
         </Link>
       </div>
     </form>

@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { BILLING_INTERVALS } from "@/lib/enums";
-import { formatCents } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
 import { listPlans } from "@/lib/plans";
 import { requireAdmin } from "@/lib/session";
 
@@ -24,9 +24,9 @@ export default async function PlansPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Plans</h1>
+        <h1 className="text-2xl font-semibold">Πακέτα</h1>
         <Link href="/plans/create" className={buttonVariants()}>
-          Add plan
+          Νέο πακέτο
         </Link>
       </div>
 
@@ -39,11 +39,11 @@ export default async function PlansPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Billing</TableHead>
-                <TableHead>Visits</TableHead>
-                <TableHead className="w-[60px] text-right">Actions</TableHead>
+                <TableHead>Όνομα</TableHead>
+                <TableHead>Τιμή</TableHead>
+                <TableHead>Χρέωση</TableHead>
+                <TableHead>Επισκέψεις</TableHead>
+                <TableHead className="w-[60px] text-right">Ενέργειες</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -52,10 +52,10 @@ export default async function PlansPage() {
                   <TableCell className="font-medium">{p.name}</TableCell>
                   <TableCell>
                     {p.currency === "EUR" ? "€" : `${p.currency} `}
-                    {formatCents(p.price_cents)}
+                    {formatMoney(p.price_cents)}
                   </TableCell>
                   <TableCell>{BILLING_INTERVALS[p.billing_interval]}</TableCell>
-                  <TableCell>{p.visits ?? "Unlimited"}</TableCell>
+                  <TableCell>{p.visits ?? "Απεριόριστες"}</TableCell>
                   <TableCell className="w-[60px]">
                     <div className="flex items-start justify-end gap-1">
                       <Link
@@ -64,8 +64,8 @@ export default async function PlansPage() {
                           variant: "ghost",
                           size: "icon-sm",
                         })}
-                        aria-label={`Update ${p.name}`}
-                        title={`Update ${p.name}`}
+                        aria-label={`Επεξεργασία ${p.name}`}
+                        title={`Επεξεργασία ${p.name}`}
                       >
                         <Pencil />
                       </Link>

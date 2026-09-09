@@ -22,16 +22,16 @@ function parseFields(formData: FormData): ParsedPlan | { error: string } {
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
   const name = get("name").slice(0, 100);
-  if (!name) return { error: "A plan name is required." };
+  if (!name) return { error: "Το όνομα του πακέτου είναι υποχρεωτικό." };
 
   const priceCents = parsePriceToCents(get("price"));
   if (priceCents === null) {
-    return { error: "Enter a price like 45 or 45.50." };
+    return { error: "Δώσε τιμή όπως 45 ή 45,50." };
   }
 
   const billingInterval = get("billing_interval");
   if (!isBillingInterval(billingInterval)) {
-    return { error: "Choose a billing interval." };
+    return { error: "Διάλεξε συχνότητα χρέωσης." };
   }
 
   // Blank means unlimited, which the column stores as NULL.
@@ -42,7 +42,7 @@ function parseFields(formData: FormData): ParsedPlan | { error: string } {
     if (!Number.isSafeInteger(n) || n < 1) {
       return {
         error:
-          "Visits must be a whole number above zero, or blank for unlimited.",
+          "Οι επισκέψεις πρέπει να είναι ακέραιος μεγαλύτερος του μηδενός ή κενό για απεριόριστες.",
       };
     }
     visits = n;
@@ -83,7 +83,7 @@ export async function updatePlan(
   await requireAdmin();
 
   const id = parsePlanId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown plan." };
+  if (id === null) return { error: "Άγνωστο πακέτο." };
 
   const f = parseFields(formData);
   if ("error" in f) return f;
@@ -94,7 +94,7 @@ export async function updatePlan(
      WHERE id = $5`,
     [f.name, f.priceCents, f.billingInterval, f.visits, id],
   );
-  if (rowCount === 0) return { error: "Unknown plan." };
+  if (rowCount === 0) return { error: "Άγνωστο πακέτο." };
 
   revalidatePath("/plans");
   revalidatePath(`/plans/${id}/update`);
@@ -110,18 +110,18 @@ export async function deletePlan(
   await requireAdmin();
 
   const id = parsePlanId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown plan." };
+  if (id === null) return { error: "Άγνωστο πακέτο." };
 
   try {
     const { rowCount } = await db().query("DELETE FROM plans WHERE id = $1", [
       id,
     ]);
-    if (rowCount === 0) return { error: "Unknown plan." };
+    if (rowCount === 0) return { error: "Άγνωστο πακέτο." };
   } catch (err) {
     if (hasPgCode(err, "23503")) {
       return {
         error:
-          "This plan has been sold to members and cannot be deleted.",
+          "Το πακέτο έχει πουληθεί σε μέλη και δεν μπορεί να διαγραφεί.",
       };
     }
     throw err;

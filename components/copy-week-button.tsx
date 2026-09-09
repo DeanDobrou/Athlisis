@@ -21,7 +21,7 @@ export function CopyWeekButton({ week }: { week: string }) {
         <input type="hidden" name="week" value={week} />
         <Button type="submit" variant="outline" disabled={pending}>
           <CalendarPlus />
-          {pending ? "Copying..." : "Copy last week"}
+          {pending ? "Γίνεται αντιγραφή..." : "Αντιγραφή προηγούμενης εβδομάδας"}
         </Button>
       </form>
 

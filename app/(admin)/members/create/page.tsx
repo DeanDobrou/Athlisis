@@ -7,8 +7,8 @@ export default async function NewMemberPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Add member</h1>
-      <MemberForm action={createMember} submitLabel="Create member" />
+      <h1 className="text-2xl font-semibold">Νέο μέλος</h1>
+      <MemberForm action={createMember} submitLabel="Δημιουργία μέλους" />
     </div>
   );
 }

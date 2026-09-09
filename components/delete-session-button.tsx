@@ -28,7 +28,7 @@ export function DeleteSessionButton({
       <form
         action={formAction}
         onSubmit={(e) => {
-          if (!confirm(`Delete ${label}? This cannot be undone.`)) {
+          if (!confirm(`Διαγραφή ${label}; Η ενέργεια δεν αναιρείται.`)) {
             e.preventDefault();
           }
         }}
@@ -40,8 +40,8 @@ export function DeleteSessionButton({
           variant="ghost"
           size="icon-sm"
           disabled={pending}
-          aria-label={`Delete ${label}`}
-          title={`Delete ${label}`}
+          aria-label={`Διαγραφή ${label}`}
+          title={`Διαγραφή ${label}`}
         >
           <Trash2 className="text-destructive" />
         </Button>

@@ -13,7 +13,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Athlisis</CardTitle>
-          <CardDescription>Sign in to the admin dashboard.</CardDescription>
+          <CardDescription>Συνδέσου στον πίνακα διαχείρισης.</CardDescription>
         </CardHeader>
         <CardContent>
           <LoginForm />

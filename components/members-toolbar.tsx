@@ -23,11 +23,11 @@ const ANY = "all";
 // The popup is only mounted while open, so without `items` the closed trigger
 // shows the raw value ("all") instead of its label.
 const STATUS_ITEMS = {
-  [ANY]: "Status",
-  active: "Active",
-  inactive: "Inactive",
+  [ANY]: "Κατάσταση",
+  active: "Ενεργό",
+  inactive: "Ανενεργό",
 };
-const ROLE_ITEMS = { [ANY]: "Roles", member: "Member", admin: "Admin" };
+const ROLE_ITEMS = { [ANY]: "Ρόλοι", member: "Μέλος", admin: "Διαχειριστής" };
 
 export function MembersToolbar({ q, status, role }: Filters) {
   const router = useRouter();
@@ -76,13 +76,13 @@ export function MembersToolbar({ q, status, role }: Filters) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Members</h1>
+        <h1 className="text-2xl font-semibold">Μέλη</h1>
         <div className="flex gap-2">
           <Button variant="outline" onClick={reset} disabled={!hasFilters}>
-            Reset filters
+            Καθαρισμός φίλτρων
           </Button>
           <Link href="/members/create" className={buttonVariants()}>
-            Add member
+            Νέο μέλος
           </Link>
         </div>
       </div>
@@ -94,8 +94,8 @@ export function MembersToolbar({ q, status, role }: Filters) {
         <Input
           value={filters.q}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name or email"
-          aria-label="Search members"
+          placeholder="Αναζήτηση ονόματος ή email"
+          aria-label="Αναζήτηση μελών"
           className="min-w-56 flex-1"
         />
         <Select
@@ -105,13 +105,13 @@ export function MembersToolbar({ q, status, role }: Filters) {
             setChoice("status", value === ANY ? "" : String(value))
           }
         >
-          <SelectTrigger className="w-40" aria-label="Filter by status">
+          <SelectTrigger className="w-40" aria-label="Φίλτρο κατάστασης">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value={ANY}>Κατάσταση</SelectItem>
+            <SelectItem value="active">Ενεργό</SelectItem>
+            <SelectItem value="inactive">Ανενεργό</SelectItem>
           </SelectContent>
         </Select>
         <Select
@@ -121,13 +121,13 @@ export function MembersToolbar({ q, status, role }: Filters) {
             setChoice("role", value === ANY ? "" : String(value))
           }
         >
-          <SelectTrigger className="w-40" aria-label="Filter by role">
+          <SelectTrigger className="w-40" aria-label="Φίλτρο ρόλου">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>All roles</SelectItem>
-            <SelectItem value="member">Member</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
+            <SelectItem value={ANY}>Όλοι οι ρόλοι</SelectItem>
+            <SelectItem value="member">Μέλος</SelectItem>
+            <SelectItem value="admin">Διαχειριστής</SelectItem>
           </SelectContent>
         </Select>
       </div>

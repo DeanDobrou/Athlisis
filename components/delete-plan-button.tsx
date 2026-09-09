@@ -25,7 +25,7 @@ export function DeletePlanButton({
       <form
         action={formAction}
         onSubmit={(e) => {
-          if (!confirm(`Delete ${planName}? This cannot be undone.`)) {
+          if (!confirm(`Διαγραφή ${planName}; Η ενέργεια δεν αναιρείται.`)) {
             e.preventDefault();
           }
         }}
@@ -37,14 +37,14 @@ export function DeletePlanButton({
             variant="ghost"
             size="icon-sm"
             disabled={pending}
-            aria-label={`Delete ${planName}`}
-            title={`Delete ${planName}`}
+            aria-label={`Διαγραφή ${planName}`}
+            title={`Διαγραφή ${planName}`}
           >
             <Trash2 className="text-destructive" />
           </Button>
         ) : (
           <Button type="submit" variant="destructive" disabled={pending}>
-            {pending ? "Deleting..." : "Delete"}
+            {pending ? "Γίνεται διαγραφή..." : "Διαγραφή"}
           </Button>
         )}
       </form>

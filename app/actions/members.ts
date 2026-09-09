@@ -28,9 +28,9 @@ function parseFields(formData: FormData) {
 }
 
 function validate(f: Fields): string | null {
-  if (!f.firstName || !f.lastName) return "First and last name are required.";
+  if (!f.firstName || !f.lastName) return "Το όνομα και το επώνυμο είναι υποχρεωτικά.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) {
-    return "Enter a valid email address.";
+    return "Δώσε έγκυρη διεύθυνση email.";
   }
   return null;
 }
@@ -76,7 +76,7 @@ export async function createMember(
     memberId = rows[0].id;
   } catch (err) {
     if (isDuplicateEmail(err)) {
-      return { error: "That email address is already registered." };
+      return { error: "Αυτό το email χρησιμοποιείται ήδη." };
     }
     throw err;
   }
@@ -97,7 +97,7 @@ export async function updateMember(
   const admin = await requireAdmin();
 
   const id = parseMemberId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown member." };
+  if (id === null) return { error: "Άγνωστο μέλος." };
 
   const f = parseFields(formData);
   const invalid = validate(f);
@@ -107,7 +107,7 @@ export async function updateMember(
     String(formData.get("status") ?? "") === "inactive" ? "inactive" : "active";
 
   if (id === admin.userId && (status === "inactive" || f.role !== "admin")) {
-    return { error: "You cannot remove your own admin access." };
+    return { error: "Δεν μπορείς να αφαιρέσεις τα δικά σου δικαιώματα διαχειριστή." };
   }
 
   // Blank means "leave the current password alone".
@@ -138,10 +138,10 @@ export async function updateMember(
         id,
       ],
     );
-    if (rowCount === 0) return { error: "Unknown member." };
+    if (rowCount === 0) return { error: "Άγνωστο μέλος." };
   } catch (err) {
     if (isDuplicateEmail(err)) {
-      return { error: "That email address is already registered." };
+      return { error: "Αυτό το email χρησιμοποιείται ήδη." };
     }
     throw err;
   }
@@ -160,21 +160,21 @@ export async function deleteMember(
   const admin = await requireAdmin();
 
   const id = parseMemberId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown member." };
+  if (id === null) return { error: "Άγνωστο μέλος." };
   if (id === admin.userId) {
-    return { error: "You cannot delete your own account." };
+    return { error: "Δεν μπορείς να διαγράψεις τον δικό σου λογαριασμό." };
   }
 
   if (await hasCoverageToday(id)) {
     return {
       error:
-        "This member has an active membership and cannot be deleted. Set it to inactive or delete it first.",
+        "Το μέλος έχει ενεργή συνδρομή και δεν μπορεί να διαγραφεί. Κάνε τη συνδρομή ανενεργή ή διάγραψέ τη πρώτα.",
     };
   }
   if (await countMemberships(id)) {
     return {
       error:
-        "This member has membership history and cannot be deleted. Delete their memberships first.",
+        "Το μέλος έχει ιστορικό συνδρομών και δεν μπορεί να διαγραφεί. Διάγραψε πρώτα τις συνδρομές του.",
     };
   }
 
@@ -182,12 +182,12 @@ export async function deleteMember(
     const { rowCount } = await db().query("DELETE FROM users WHERE id = $1", [
       id,
     ]);
-    if (rowCount === 0) return { error: "Unknown member." };
+    if (rowCount === 0) return { error: "Άγνωστο μέλος." };
   } catch (err) {
     if (isStillReferenced(err)) {
       return {
         error:
-          "This member has bookings, sessions, WODs or membership history on record and cannot be deleted.",
+          "Το μέλος έχει κρατήσεις, μαθήματα, WOD ή ιστορικό συνδρομών και δεν μπορεί να διαγραφεί.",
       };
     }
     throw err;

@@ -22,9 +22,9 @@ export default async function ClassTypesPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Class types</h1>
+        <h1 className="text-2xl font-semibold">Τύποι μαθημάτων</h1>
         <Link href="/class-types/create" className={buttonVariants()}>
-          Add class type
+          Νέος τύπος
         </Link>
       </div>
 
@@ -37,9 +37,9 @@ export default async function ClassTypesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Colour</TableHead>
-                <TableHead className="w-[60px] text-right">Actions</TableHead>
+                <TableHead>Όνομα</TableHead>
+                <TableHead>Χρώμα</TableHead>
+                <TableHead className="w-[60px] text-right">Ενέργειες</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -51,7 +51,7 @@ export default async function ClassTypesPage() {
                         the hex it replaced was the only text here. */}
                     <span
                       role="img"
-                      aria-label={`${c.name} colour`}
+                      aria-label={`Χρώμα ${c.name}`}
                       className="block h-4 w-12 rounded border"
                       style={{ backgroundColor: c.color_hex ?? "transparent" }}
                     />
@@ -64,8 +64,8 @@ export default async function ClassTypesPage() {
                           variant: "ghost",
                           size: "icon-sm",
                         })}
-                        aria-label={`Update ${c.name}`}
-                        title={`Update ${c.name}`}
+                        aria-label={`Επεξεργασία ${c.name}`}
+                        title={`Επεξεργασία ${c.name}`}
                       >
                         <Pencil />
                       </Link>

@@ -63,7 +63,7 @@ export function MembershipForm({
       {membership && <input type="hidden" name="id" value={membership.id} />}
 
       <div className="grid gap-2">
-        <Label htmlFor="user_id">Member</Label>
+        <Label htmlFor="user_id">Μέλος</Label>
         <Select
           name="user_id"
           items={memberItems}
@@ -83,7 +83,7 @@ export function MembershipForm({
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="plan_id">Plan</Label>
+        <Label htmlFor="plan_id">Πακέτο</Label>
         <Select
           name="plan_id"
           items={planItems}
@@ -110,7 +110,7 @@ export function MembershipForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
-          <Label htmlFor="amount">Price (EUR)</Label>
+          <Label htmlFor="amount">Τιμή (EUR)</Label>
           <Input
             id="amount"
             name="amount"
@@ -122,9 +122,9 @@ export function MembershipForm({
         </div>
         <DateField
           name="paid_on"
-          label="Paid on"
-          placeholder="Not paid yet"
-          clearLabel="Not paid yet"
+          label="Πληρώθηκε"
+          placeholder="Απλήρωτη"
+          clearLabel="Απλήρωτη"
           defaultValue={
             membership ? (membership.paid_on ?? "") : todayInGym()
           }
@@ -132,13 +132,14 @@ export function MembershipForm({
       </div>
 
       <p className="text-muted-foreground text-xs">
-        The price is what the period costs. Zero means it was granted rather
-        than sold. Clearing the date leaves the money uncollected, and the
-        membership reads as Unpaid until someone records it.
+        Η τιμή είναι το κόστος της περιόδου. Το μηδέν σημαίνει ότι δόθηκε
+        αντί να πουληθεί. Αν καθαρίσεις την ημερομηνία, τα χρήματα δεν έχουν
+        εισπραχθεί και η συνδρομή εμφανίζεται ως Ανεξόφλητη μέχρι να
+        καταγραφούν.
       </p>
 
       <div className="grid gap-2">
-        <span className="text-sm font-medium">Method</span>
+        <span className="text-sm font-medium">Τρόπος πληρωμής</span>
         <RadioGroup
           name="method"
           defaultValue={membership?.method ?? "cash"}
@@ -160,11 +161,11 @@ export function MembershipForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <DateField
           name="starts_on"
-          label="Starts on"
+          label="Έναρξη"
           defaultValue={membership?.starts_on ?? todayInGym()}
         />
         <div className="grid gap-2">
-          <span className="text-sm font-medium">Status</span>
+          <span className="text-sm font-medium">Κατάσταση</span>
           <RadioGroup
             name="status"
             defaultValue={membership?.status ?? "active"}
@@ -186,22 +187,23 @@ export function MembershipForm({
 
       {membership && (
         <div className="grid gap-2">
-          <Label htmlFor="visits_remaining">Visits remaining</Label>
+          <Label htmlFor="visits_remaining">Υπόλοιπο επισκέψεων</Label>
           <Input
             id="visits_remaining"
             name="visits_remaining"
             inputMode="numeric"
             defaultValue={membership.visits_remaining ?? ""}
-            placeholder="Blank for unlimited"
+            placeholder="Κενό για απεριόριστες"
           />
         </div>
       )}
 
       <p className="text-muted-foreground text-xs">
-        The end date is set from the plan: a monthly plan runs to the same day
-        of the next month. Visits start at the plan allowance. The list shows
-        Completed or Scheduled on its own once the period has passed or not yet
-        begun - only Active and Inactive are set here.
+        Η ημερομηνία λήξης βγαίνει από το πακέτο: ένα μηνιαίο πακέτο φτάνει
+        ως την ίδια ημέρα του επόμενου μήνα. Οι επισκέψεις ξεκινούν από το
+        όριο του πακέτου. Η λίστα δείχνει μόνη της Ολοκληρωμένη ή
+        Προγραμματισμένη όταν η περίοδος έχει περάσει ή δεν έχει αρχίσει -
+        εδώ ορίζεις μόνο Ενεργή και Ανενεργή.
       </p>
 
       {state?.error && (
@@ -212,13 +214,13 @@ export function MembershipForm({
 
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
-          {pending ? "Saving..." : submitLabel}
+          {pending ? "Αποθήκευση..." : submitLabel}
         </Button>
         <Link
           href="/memberships"
           className={buttonVariants({ variant: "outline" })}
         >
-          Cancel
+          Άκυρο
         </Link>
       </div>
     </form>

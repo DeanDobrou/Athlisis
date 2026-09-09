@@ -28,17 +28,17 @@ function parseFields(formData: FormData): ParsedMembership | { error: string } {
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
   const userId = parseMemberId(get("user_id"));
-  if (userId === null) return { error: "Choose a member." };
+  if (userId === null) return { error: "Διάλεξε μέλος." };
 
   const planId = parsePlanId(get("plan_id"));
-  if (planId === null) return { error: "Choose a plan." };
+  if (planId === null) return { error: "Διάλεξε πακέτο." };
 
   const status = get("status");
-  if (!isMembershipStatus(status)) return { error: "Choose a status." };
+  if (!isMembershipStatus(status)) return { error: "Διάλεξε κατάσταση." };
 
   const startsOn = get("starts_on");
   if (!isRealDate(startsOn)) {
-    return { error: "Enter a real start date." };
+    return { error: "Δώσε υπαρκτή ημερομηνία έναρξης." };
   }
 
   // The money is part of the membership now: a row is a period that was paid
@@ -46,22 +46,22 @@ function parseFields(formData: FormData): ParsedMembership | { error: string } {
   // Zero is allowed and means granted rather than sold.
   const amountCents = parsePriceToCents(get("amount"));
   if (amountCents === null) {
-    return { error: "Enter an amount like 60 or 60.50." };
+    return { error: "Δώσε ποσό όπως 60 ή 60,50." };
   }
 
   const method = get("method");
-  if (!isPaymentMethod(method)) return { error: "Choose a payment method." };
+  if (!isPaymentMethod(method)) return { error: "Διάλεξε τρόπο πληρωμής." };
 
   // Blank is the money not being collected yet, which reads as Unpaid. It is
   // how the mobile app writes a membership when a member out of visits books
   // on a promise to pay, and staff can write the same thing by hand.
   const paidOn = get("paid_on");
   if (paidOn && !isRealDate(paidOn)) {
-    return { error: "Enter a real payment date, or clear it if unpaid." };
+    return { error: "Δώσε υπαρκτή ημερομηνία πληρωμής ή καθάρισέ τη αν είναι ανεξόφλητη." };
   }
 
   if (amountCents === 0 && !paidOn) {
-    return { error: "A free period has nothing to collect. Set the paid date." };
+    return { error: "Μια δωρεάν περίοδος δεν έχει τίποτα να εισπραχθεί. Όρισε ημερομηνία πληρωμής." };
   }
 
   return {
@@ -108,7 +108,7 @@ export async function createMembership(
       admin.userId,
     ],
   );
-  if (rowCount === 0) return { error: "Unknown plan." };
+  if (rowCount === 0) return { error: "Άγνωστο πακέτο." };
 
   revalidatePath("/memberships");
   revalidatePath(`/members/${f.userId}`);
@@ -122,7 +122,7 @@ export async function updateMembership(
   const admin = await requireAdmin();
 
   const id = parseMembershipId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown membership." };
+  if (id === null) return { error: "Άγνωστη συνδρομή." };
 
   const f = parseFields(formData);
   if ("error" in f) return f;
@@ -132,7 +132,7 @@ export async function updateMembership(
   if (rawVisits) {
     const n = Number(rawVisits);
     if (!Number.isSafeInteger(n) || n < 0) {
-      return { error: "Visits remaining must be zero or a whole number." };
+      return { error: "Οι υπόλοιπες επισκέψεις πρέπει να είναι μηδέν ή ακέραιος αριθμός." };
     }
     visitsRemaining = n;
   }
@@ -170,7 +170,7 @@ export async function updateMembership(
       admin.userId,
     ],
   );
-  if (rowCount === 0) return { error: "Unknown membership." };
+  if (rowCount === 0) return { error: "Άγνωστη συνδρομή." };
 
   revalidatePath("/memberships");
   revalidatePath(`/members/${f.userId}`);
@@ -189,7 +189,7 @@ export async function deleteMembership(
   await requireAdmin();
 
   const id = parseMembershipId(String(formData.get("id") ?? ""));
-  if (id === null) return { error: "Unknown membership." };
+  if (id === null) return { error: "Άγνωστη συνδρομή." };
 
   // A row with paid_on set is the only record that cash was taken, so
   // deleting it destroys the record. That, and nothing about the dates, is
@@ -214,8 +214,8 @@ export async function deleteMembership(
     );
     return {
       error: rowCount
-        ? "This membership records money taken. Set it to inactive instead."
-        : "Unknown membership.",
+        ? "Η συνδρομή καταγράφει χρήματα που εισπράχθηκαν. Κάνε την ανενεργή αντί να τη διαγράψεις."
+        : "Άγνωστη συνδρομή.",
     };
   }
 

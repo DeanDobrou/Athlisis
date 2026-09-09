@@ -22,7 +22,7 @@ export default async function UpdateClassTypePage({
       <ClassTypeForm
         action={updateClassType}
         classType={classType}
-        submitLabel="Save class type"
+        submitLabel="Αποθήκευση τύπου"
       />
     </div>
   );

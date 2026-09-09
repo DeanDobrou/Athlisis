@@ -34,8 +34,8 @@ export function Pagination({
       </p>
       {pageCount > 1 && (
         <div className="flex gap-2">
-          <Step href={href(page - 1)} disabled={page <= 1} label="Previous" />
-          <Step href={href(page + 1)} disabled={page >= pageCount} label="Next" />
+          <Step href={href(page - 1)} disabled={page <= 1} label="Προηγούμενη" />
+          <Step href={href(page + 1)} disabled={page >= pageCount} label="Επόμενη" />
         </div>
       )}
     </div>

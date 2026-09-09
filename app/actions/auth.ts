@@ -30,7 +30,7 @@ export async function login(
   const password = String(formData.get("password") ?? "");
 
   if (!email || !password) {
-    return { error: "Enter your email and password." };
+    return { error: "Συμπλήρωσε email και κωδικό." };
   }
 
   const forwarded = (await headers()).get("x-forwarded-for");
@@ -66,7 +66,7 @@ export async function login(
     user.role === "admin";
 
   if (!ok) {
-    return { error: "Invalid email or password." };
+    return { error: "Λάθος email ή κωδικός." };
   }
 
   clearRateLimit(bucket);

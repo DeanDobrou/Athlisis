@@ -18,18 +18,18 @@ import { weekStart } from "@/lib/gym-time";
 // again in the browser, and their ICU data can disagree on abbreviations
 // ("Sep" against "Sept"), which is a hydration mismatch over nothing.
 const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+  "Ιαν",
+  "Φεβ",
+  "Μαρ",
+  "Απρ",
+  "Μάι",
+  "Ιουν",
+  "Ιουλ",
+  "Αυγ",
+  "Σεπ",
+  "Οκτ",
+  "Νοε",
+  "Δεκ",
 ];
 
 /** "31 Aug - 6 Sep 2026", from two YYYY-MM-DD strings, no Date involved. */

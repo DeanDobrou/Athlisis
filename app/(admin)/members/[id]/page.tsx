@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDate } from "@/lib/gym-time";
 import { getMember } from "@/lib/members";
 import {
   hasCoverageToday,
@@ -47,19 +48,19 @@ export default async function MemberPage({
           <h1 className="text-2xl font-semibold">{fullName}</h1>
           <div className="mt-2 flex gap-2">
             {member.role === "admin" ? (
-              <Badge>Admin</Badge>
+              <Badge>Διαχειριστής</Badge>
             ) : (
-              <Badge variant="outline">Member</Badge>
+              <Badge variant="outline">Μέλος</Badge>
             )}
             {member.status === "active" ? (
-              <Badge variant="secondary">Active</Badge>
+              <Badge variant="secondary">Ενεργό</Badge>
             ) : (
-              <Badge variant="destructive">Inactive</Badge>
+              <Badge variant="destructive">Ανενεργό</Badge>
             )}
             {covered ? (
-              <Badge variant="secondary">Covered</Badge>
+              <Badge variant="secondary">Με κάλυψη</Badge>
             ) : (
-              <Badge variant="outline">No coverage</Badge>
+              <Badge variant="outline">Χωρίς κάλυψη</Badge>
             )}
           </div>
         </div>
@@ -69,7 +70,7 @@ export default async function MemberPage({
             href={`/members/${member.id}/update`}
             className={buttonVariants()}
           >
-            Update
+            Επεξεργασία
           </Link>
           {!isSelf && (
             <DeleteMemberButton memberId={member.id} memberName={fullName} />
@@ -79,29 +80,29 @@ export default async function MemberPage({
 
       <dl className="grid max-w-xl gap-x-6 gap-y-3 sm:grid-cols-[10rem_1fr]">
         <Row label="Email" value={member.email} />
-        <Row label="Phone" value={member.phone} />
-        <Row label="Date of birth" value={member.date_of_birth} />
-        <Row label="Member since" value={member.created_at} />
+        <Row label="Τηλέφωνο" value={member.phone} />
+        <Row label="Ημερομηνία γέννησης" value={member.date_of_birth && formatDate(member.date_of_birth)} />
+        <Row label="Μέλος από" value={formatDate(member.created_at)} />
       </dl>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Memberships</h2>
+        <h2 className="text-lg font-semibold">Συνδρομές</h2>
 
         {memberships.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No memberships yet. This member has no coverage. Memberships are
-            managed on the Memberships screen.
+            Δεν υπάρχουν συνδρομές ακόμη, οπότε το μέλος δεν έχει κάλυψη. Οι
+            συνδρομές διαχειρίζονται από την οθόνη Συνδρομές.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Starts</TableHead>
-                  <TableHead>Ends</TableHead>
-                  <TableHead>Visits left</TableHead>
-                  <TableHead>State</TableHead>
+                  <TableHead>Πακέτο</TableHead>
+                  <TableHead>Έναρξη</TableHead>
+                  <TableHead>Λήξη</TableHead>
+                  <TableHead>Υπόλοιπο επισκέψεων</TableHead>
+                  <TableHead>Κατάσταση</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -110,9 +111,9 @@ export default async function MemberPage({
                     <TableCell className="font-medium">
                       {ms.plan_name}
                     </TableCell>
-                    <TableCell>{ms.starts_on}</TableCell>
-                    <TableCell>{ms.ends_on ?? "Open ended"}</TableCell>
-                    <TableCell>{ms.visits_remaining ?? "Unlimited"}</TableCell>
+                    <TableCell>{formatDate(ms.starts_on)}</TableCell>
+                    <TableCell>{ms.ends_on ? formatDate(ms.ends_on) : "Χωρίς λήξη"}</TableCell>
+                    <TableCell>{ms.visits_remaining ?? "Απεριόριστες"}</TableCell>
                     <TableCell>
                       <MembershipStateBadge state={ms.state} />
                     </TableCell>
@@ -125,7 +126,7 @@ export default async function MemberPage({
       </section>
 
       <Link href="/members" className={buttonVariants({ variant: "ghost" })}>
-        Back to members
+        Πίσω στα μέλη
       </Link>
     </div>
   );

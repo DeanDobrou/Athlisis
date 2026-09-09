@@ -27,12 +27,12 @@ import {
 } from "@/components/ui/sidebar";
 
 const nav = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Members", href: "/members", icon: Users },
-  { title: "Memberships", href: "/memberships", icon: CreditCard },
-  { title: "Plans", href: "/plans", icon: Tags },
-  { title: "Schedule", href: "/schedule", icon: CalendarDays },
-  { title: "Class types", href: "/class-types", icon: Shapes },
+  { title: "Με μια ματιά", href: "/dashboard", icon: LayoutDashboard },
+  { title: "Μέλη", href: "/members", icon: Users },
+  { title: "Συνδρομές", href: "/memberships", icon: CreditCard },
+  { title: "Πακέτα", href: "/plans", icon: Tags },
+  { title: "Πρόγραμμα", href: "/schedule", icon: CalendarDays },
+  { title: "Τύποι μαθημάτων", href: "/class-types", icon: Shapes },
   { title: "WODs", href: "/wods", icon: Dumbbell },
 ];
 
@@ -74,7 +74,7 @@ export function AppSidebar() {
             <form action={logout}>
               <SidebarMenuButton type="submit" className="w-full">
                 <LogOut />
-                <span>Sign out</span>
+                <span>Αποσύνδεση</span>
               </SidebarMenuButton>
             </form>
           </SidebarMenuItem>

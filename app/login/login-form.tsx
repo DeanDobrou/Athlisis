@@ -29,7 +29,7 @@ export function LoginForm() {
         />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">Κωδικός</Label>
         <Input
           id="password"
           name="password"
@@ -48,7 +48,7 @@ export function LoginForm() {
       )}
 
       <Button type="submit" className="mt-2 w-full" disabled={pending}>
-        {pending ? "Signing in..." : "Sign in"}
+        {pending ? "Γίνεται σύνδεση..." : "Σύνδεση"}
       </Button>
     </form>
   );

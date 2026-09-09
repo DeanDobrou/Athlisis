@@ -19,7 +19,7 @@ export default async function NewSessionPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Add class</h1>
+      <h1 className="text-2xl font-semibold">Νέο μάθημα</h1>
       {classTypes.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           There are no class types yet. Add one before scheduling a class.
@@ -30,7 +30,7 @@ export default async function NewSessionPage({
           classTypes={classTypes}
           defaultDay={defaultDay}
           defaultCapacity={DEFAULT_CAPACITY}
-          submitLabel="Add class"
+          submitLabel="Προσθήκη μαθήματος"
         />
       )}
     </div>

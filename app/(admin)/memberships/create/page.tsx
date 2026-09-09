@@ -11,7 +11,7 @@ export default async function NewMembershipPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Add membership</h1>
+      <h1 className="text-2xl font-semibold">Νέα συνδρομή</h1>
       {members.length === 0 || plans.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           A membership needs a member and a plan. Add whichever is missing
@@ -22,7 +22,7 @@ export default async function NewMembershipPage() {
           action={createMembership}
           members={members}
           plans={plans}
-          submitLabel="Add membership"
+          submitLabel="Προσθήκη συνδρομής"
         />
       )}
     </div>

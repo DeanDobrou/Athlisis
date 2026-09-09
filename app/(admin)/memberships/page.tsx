@@ -15,12 +15,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PAYMENT_METHODS } from "@/lib/enums";
+import { formatDate } from "@/lib/gym-time";
 import {
   listMemberships,
   PAGE_SIZE,
   type MembershipFilter,
 } from "@/lib/memberships";
-import { formatCents } from "@/lib/money";
+import { formatMoney } from "@/lib/money";
 import { listPlans } from "@/lib/plans";
 import { requireAdmin } from "@/lib/session";
 
@@ -61,23 +62,23 @@ export default async function MembershipsPage({
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           {filtered
-            ? "No memberships match those filters."
-            : "No memberships yet. Add the first one."}
+            ? "Καμία συνδρομή δεν ταιριάζει με τα φίλτρα."
+            : "Δεν υπάρχουν συνδρομές ακόμη. Πρόσθεσε την πρώτη."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Member</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Starts</TableHead>
-                <TableHead>Ends</TableHead>
-                <TableHead>Visits left</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Paid on</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead className="w-[60px] text-right">Actions</TableHead>
+                <TableHead>Μέλος</TableHead>
+                <TableHead>Πακέτο</TableHead>
+                <TableHead>Έναρξη</TableHead>
+                <TableHead>Λήξη</TableHead>
+                <TableHead>Υπόλοιπο επισκέψεων</TableHead>
+                <TableHead>Τιμή</TableHead>
+                <TableHead>Πληρώθηκε</TableHead>
+                <TableHead>Κατάσταση</TableHead>
+                <TableHead className="w-[60px] text-right">Ενέργειες</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -92,18 +93,20 @@ export default async function MembershipsPage({
                     </Link>
                   </TableCell>
                   <TableCell>{ms.plan_name}</TableCell>
-                  <TableCell>{ms.starts_on}</TableCell>
-                  <TableCell>{ms.ends_on ?? "Open ended"}</TableCell>
-                  <TableCell>{ms.visits_remaining ?? "Unlimited"}</TableCell>
+                  <TableCell>{formatDate(ms.starts_on)}</TableCell>
+                  <TableCell>{ms.ends_on ? formatDate(ms.ends_on) : "Χωρίς λήξη"}</TableCell>
+                  <TableCell>{ms.visits_remaining ?? "Απεριόριστες"}</TableCell>
                   <TableCell className="whitespace-nowrap">
-                    €{formatCents(ms.amount_cents)}
+                    {formatMoney(ms.amount_cents)}
                     <span className="text-muted-foreground ml-1 text-xs">
                       {PAYMENT_METHODS[ms.method]}
                     </span>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {ms.paid_on ?? (
-                      <span className="text-muted-foreground">Not paid</span>
+                    {ms.paid_on ? (
+                      formatDate(ms.paid_on)
+                    ) : (
+                      <span className="text-muted-foreground">Απλήρωτη</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -117,14 +120,14 @@ export default async function MembershipsPage({
                           variant: "ghost",
                           size: "icon-sm",
                         })}
-                        aria-label={`Update the ${ms.plan_name} membership for ${ms.member_name}`}
-                        title="Update"
+                        aria-label={`Επεξεργασία της συνδρομής ${ms.plan_name} για ${ms.member_name}`}
+                        title="Επεξεργασία"
                       >
                         <Pencil />
                       </Link>
                       <DeleteMembershipButton
                         membershipId={ms.id}
-                        label={`${ms.plan_name} membership for ${ms.member_name}`}
+                        label={`συνδρομή ${ms.plan_name} για ${ms.member_name}`}
                       />
                     </div>
                   </TableCell>

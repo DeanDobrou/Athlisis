@@ -26,7 +26,7 @@ export function DeleteMembershipButton({
       <form
         action={formAction}
         onSubmit={(e) => {
-          if (!confirm(`Delete the ${label}?`)) {
+          if (!confirm(`Διαγραφή ${label};`)) {
             e.preventDefault();
           }
         }}
@@ -37,8 +37,8 @@ export function DeleteMembershipButton({
           variant="ghost"
           size="icon-sm"
           disabled={pending}
-          aria-label={`Delete the ${label}`}
-          title={`Delete the ${label}`}
+          aria-label={`Διαγραφή ${label}`}
+          title={`Διαγραφή ${label}`}
         >
           <Trash2 className="text-destructive" />
         </Button>

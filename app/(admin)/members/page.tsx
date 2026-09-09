@@ -50,20 +50,20 @@ export default async function MembersPage({
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           {filtered
-            ? "No members match those filters."
-            : "No members yet. Add the first one."}
+            ? "Κανένα μέλος δεν ταιριάζει με τα φίλτρα."
+            : "Δεν υπάρχουν μέλη ακόμη. Πρόσθεσε το πρώτο."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
+                <TableHead>Όνομα</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                <TableHead>Τηλέφωνο</TableHead>
+                <TableHead>Ρόλος</TableHead>
+                <TableHead>Κατάσταση</TableHead>
+                <TableHead className="w-[100px] text-right">Ενέργειες</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -87,16 +87,16 @@ export default async function MembersPage({
                     <TableCell>{m.phone ?? "-"}</TableCell>
                     <TableCell>
                       {m.role === "admin" ? (
-                        <Badge>Admin</Badge>
+                        <Badge>Διαχειριστής</Badge>
                       ) : (
-                        <Badge variant="outline">Member</Badge>
+                        <Badge variant="outline">Μέλος</Badge>
                       )}
                     </TableCell>
                     <TableCell>
                       {m.status === "active" ? (
-                        <Badge variant="secondary">Active</Badge>
+                        <Badge variant="secondary">Ενεργό</Badge>
                       ) : (
-                        <Badge variant="destructive">Inactive</Badge>
+                        <Badge variant="destructive">Ανενεργό</Badge>
                       )}
                     </TableCell>
                     {/* z-10 lifts the actions above the row overlay so these
@@ -109,8 +109,8 @@ export default async function MembersPage({
                             variant: "ghost",
                             size: "icon-sm",
                           })}
-                          aria-label={`View ${name}`}
-                          title={`View ${name}`}
+                          aria-label={`Προβολή ${name}`}
+                          title={`Προβολή ${name}`}
                         >
                           <Eye />
                         </Link>
@@ -120,8 +120,8 @@ export default async function MembersPage({
                             variant: "ghost",
                             size: "icon-sm",
                           })}
-                          aria-label={`Update ${name}`}
-                          title={`Update ${name}`}
+                          aria-label={`Επεξεργασία ${name}`}
+                          title={`Επεξεργασία ${name}`}
                         >
                           <Pencil />
                         </Link>

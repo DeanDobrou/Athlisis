@@ -30,7 +30,7 @@ export function ClassTypeForm({
       {classType && <input type="hidden" name="id" value={classType.id} />}
 
       <div className="grid gap-2">
-        <Label htmlFor="name">Name</Label>
+        <Label htmlFor="name">Όνομα</Label>
         <Input
           id="name"
           name="name"
@@ -41,7 +41,7 @@ export function ClassTypeForm({
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="color_hex">Colour</Label>
+        <Label htmlFor="color_hex">Χρώμα</Label>
         {/* Native colour input: the OS picker is better than anything worth
             building, and it works on mobile too. */}
         <Input
@@ -65,13 +65,13 @@ export function ClassTypeForm({
 
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
-          {pending ? "Saving..." : submitLabel}
+          {pending ? "Αποθήκευση..." : submitLabel}
         </Button>
         <Link
           href="/class-types"
           className={buttonVariants({ variant: "outline" })}
         >
-          Cancel
+          Άκυρο
         </Link>
       </div>
     </form>

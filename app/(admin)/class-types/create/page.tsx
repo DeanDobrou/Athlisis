@@ -7,10 +7,10 @@ export default async function NewClassTypePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Add class type</h1>
+      <h1 className="text-2xl font-semibold">Νέος τύπος μαθήματος</h1>
       <ClassTypeForm
         action={createClassType}
-        submitLabel="Create class type"
+        submitLabel="Δημιουργία τύπου"
       />
     </div>
   );

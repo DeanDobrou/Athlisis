@@ -55,19 +55,28 @@ export function weekStart(isoDate: string): string {
 }
 
 const WEEKDAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
+  "Δευτέρα",
+  "Τρίτη",
+  "Τετάρτη",
+  "Πέμπτη",
+  "Παρασκευή",
+  "Σάββατο",
+  "Κυριακή",
 ];
 
 /** Weekday name for a date, without going through the host locale. */
 export function weekdayName(isoDate: string): string {
   const d = new Date(`${isoDate}T00:00:00Z`);
   return WEEKDAYS[(d.getUTCDay() + 6) % 7];
+}
+
+/**
+ * A stored date shown the way it is read here: 2026-09-09 becomes 09/09/2026.
+ * ISO stays the format in the database, the URL and the hidden form input;
+ * this is display only, so there is no parsing to undo.
+ */
+export function formatDate(isoDate: string): string {
+  return isoDate.split("-").reverse().join("/");
 }
 
 /** The gym trains Monday to Friday, so a week is five columns, not seven. */

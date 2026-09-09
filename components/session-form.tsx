@@ -57,7 +57,7 @@ export function SessionForm({
 
       <DateField
         name="day"
-        label="Date"
+        label="Ημερομηνία"
         defaultValue={session?.day ?? defaultDay}
         // The gym trains Monday to Friday, and the schedule only has columns
         // for those, so a weekend class would save and then be invisible.
@@ -65,7 +65,7 @@ export function SessionForm({
       />
 
       <div className="grid gap-2">
-        <span className="text-sm font-medium">Time</span>
+        <span className="text-sm font-medium">Ώρα</span>
         <div className="flex flex-wrap gap-2">
           {SLOTS.map((option) => {
             const active = option.start === start && option.end === end;
@@ -96,7 +96,7 @@ export function SessionForm({
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="grid gap-2">
-          <Label htmlFor="start_time">Starts</Label>
+          <Label htmlFor="start_time">Έναρξη</Label>
           <Input
             id="start_time"
             name="start_time"
@@ -107,7 +107,7 @@ export function SessionForm({
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="end_time">Ends</Label>
+          <Label htmlFor="end_time">Λήξη</Label>
           <Input
             id="end_time"
             name="end_time"
@@ -118,7 +118,7 @@ export function SessionForm({
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="capacity">Capacity</Label>
+          <Label htmlFor="capacity">Χωρητικότητα</Label>
           <Input
             id="capacity"
             name="capacity"
@@ -130,7 +130,7 @@ export function SessionForm({
       </div>
 
       <div className="grid gap-2">
-        <span className="text-sm font-medium">Class types</span>
+        <span className="text-sm font-medium">Τύποι μαθημάτων</span>
         <div className="grid gap-3 sm:grid-cols-2">
           {classTypes.map((t) => (
             <Label
@@ -160,7 +160,7 @@ export function SessionForm({
       </div>
 
       <div className="grid gap-2">
-        <span className="text-sm font-medium">Status</span>
+        <span className="text-sm font-medium">Κατάσταση</span>
         <RadioGroup
           name="status"
           defaultValue={session?.status ?? "scheduled"}
@@ -168,23 +168,23 @@ export function SessionForm({
         >
           <Label htmlFor="status_scheduled" className="flex items-center gap-2">
             <RadioGroupItem id="status_scheduled" value="scheduled" />
-            Scheduled
+            Προγραμματισμένο
           </Label>
           <Label htmlFor="status_cancelled" className="flex items-center gap-2">
             <RadioGroupItem id="status_cancelled" value="cancelled" />
-            Cancelled
+            Ακυρωμένο
           </Label>
         </RadioGroup>
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="notes">Notes</Label>
+        <Label htmlFor="notes">Σημειώσεις</Label>
         <Textarea
           id="notes"
           name="notes"
           rows={2}
           defaultValue={session?.notes ?? ""}
-          placeholder="Optional. Shown with the class."
+          placeholder="Προαιρετικό. Εμφανίζεται μαζί με το μάθημα."
         />
       </div>
 
@@ -196,10 +196,10 @@ export function SessionForm({
 
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
-          {pending ? "Saving..." : submitLabel}
+          {pending ? "Αποθήκευση..." : submitLabel}
         </Button>
         <Link href={backHref} className={buttonVariants({ variant: "outline" })}>
-          Cancel
+          Άκυρο
         </Link>
       </div>
     </form>

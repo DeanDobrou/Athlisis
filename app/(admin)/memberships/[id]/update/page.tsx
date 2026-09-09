@@ -32,7 +32,7 @@ export default async function UpdateMembershipPage({
         members={members}
         plans={plans}
         membership={membership}
-        submitLabel="Save membership"
+        submitLabel="Αποθήκευση συνδρομής"
       />
     </div>
   );

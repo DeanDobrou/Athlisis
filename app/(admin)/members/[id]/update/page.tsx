@@ -24,7 +24,7 @@ export default async function EditMemberPage({
       <MemberForm
         action={updateMember}
         member={member}
-        submitLabel="Save changes"
+        submitLabel="Αποθήκευση"
       />
     </div>
   );

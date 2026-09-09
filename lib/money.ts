@@ -10,6 +10,18 @@ export function parsePriceToCents(raw: string): number | null {
   return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
 }
 
+/**
+ * Money for reading: 6000 becomes "60,00 €", with the Greek decimal comma and
+ * thousands separator. Never use it to fill a form field - parsePriceToCents
+ * cannot read the currency symbol back. formatCents is the one for that.
+ */
+export function formatMoney(cents: number): string {
+  return new Intl.NumberFormat("el-GR", {
+    style: "currency",
+    currency: "EUR",
+  }).format(cents / 100);
+}
+
 export function formatCents(cents: number): string {
   const sign = cents < 0 ? "-" : "";
   const abs = Math.abs(cents);

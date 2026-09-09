@@ -23,7 +23,7 @@ export default async function UpdatePlanPage({
         <h1 className="text-2xl font-semibold">{plan.name}</h1>
         <DeletePlanButton planId={plan.id} planName={plan.name} />
       </div>
-      <PlanForm action={updatePlan} plan={plan} submitLabel="Save plan" />
+      <PlanForm action={updatePlan} plan={plan} submitLabel="Αποθήκευση πακέτου" />
     </div>
   );
 }

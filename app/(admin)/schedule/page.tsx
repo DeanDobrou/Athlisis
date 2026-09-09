@@ -57,13 +57,13 @@ export default async function SchedulePage({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Schedule</h1>
+        <h1 className="text-2xl font-semibold">Πρόγραμμα</h1>
         <div className="flex flex-wrap items-start gap-2">
           <Link
             href={`/schedule?week=${addDays(monday, -7)}`}
             className={buttonVariants({ variant: "outline", size: "icon" })}
-            aria-label="Previous week"
-            title="Previous week"
+            aria-label="Προηγούμενη εβδομάδα"
+            title="Προηγούμενη εβδομάδα"
           >
             <ChevronLeft />
           </Link>
@@ -71,8 +71,8 @@ export default async function SchedulePage({
           <Link
             href={`/schedule?week=${addDays(monday, 7)}`}
             className={buttonVariants({ variant: "outline", size: "icon" })}
-            aria-label="Next week"
-            title="Next week"
+            aria-label="Επόμενη εβδομάδα"
+            title="Επόμενη εβδομάδα"
           >
             <ChevronRight />
           </Link>
@@ -80,7 +80,7 @@ export default async function SchedulePage({
             href={`/schedule?week=${scheduleWeekStart(today)}`}
             className={buttonVariants({ variant: "outline" })}
           >
-            This week
+            Τρέχουσα εβδομάδα
           </Link>
           <CopyWeekButton week={monday} />
         </div>
@@ -110,7 +110,7 @@ export default async function SchedulePage({
                 </CardTitle>
                 {isToday && (
                   <CardAction className="text-primary text-xs font-medium">
-                    Today
+                    Σήμερα
                   </CardAction>
                 )}
               </CardHeader>
@@ -119,14 +119,14 @@ export default async function SchedulePage({
                 {dayed.length === 0 ? (
                   <div className="space-y-1">
                     <p className="text-muted-foreground text-xs font-medium">
-                      No classes
+                      Χωρίς μαθήματα
                     </p>
                     <Link
                       href={`/schedule/create?day=${day}`}
                       className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
                     >
                       <Plus className="size-3" />
-                      Add a class
+                      Προσθήκη μαθήματος
                     </Link>
                   </div>
                 ) : (
@@ -152,7 +152,7 @@ export default async function SchedulePage({
                           <div className="flex shrink-0 items-start gap-1">
                             <CopySessionButton
                               sessionId={s.id}
-                              label={`the ${s.start_time} class on ${day}`}
+                              label={`το μάθημα ${s.start_time} στις ${day}`}
                             />
                             <Link
                               href={`/schedule/${s.id}/update`}
@@ -160,15 +160,15 @@ export default async function SchedulePage({
                                 variant: "ghost",
                                 size: "icon-sm",
                               })}
-                              aria-label={`Update the ${s.start_time} class on ${day}`}
-                              title="Update"
+                              aria-label={`Επεξεργασία του μαθήματος ${s.start_time} στις ${day}`}
+                              title="Επεξεργασία"
                             >
                               <Pencil />
                             </Link>
                             <DeleteSessionButton
                               sessionId={s.id}
                               week={monday}
-                              label={`the ${s.start_time} class on ${day}`}
+                              label={`το μάθημα ${s.start_time} στις ${day}`}
                             />
                           </div>
                         </div>
@@ -190,7 +190,7 @@ export default async function SchedulePage({
                             </span>
                           ))}
                           {s.status === "cancelled" && (
-                            <Badge variant="destructive">Cancelled</Badge>
+                            <Badge variant="destructive">Ακυρωμένο</Badge>
                           )}
                         </div>
 

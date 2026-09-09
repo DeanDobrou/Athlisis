@@ -30,8 +30,8 @@ export function CopySessionButton({
           variant="ghost"
           size="icon-sm"
           disabled={pending}
-          aria-label={`Copy ${label} to the next free slot`}
-          title="Copy to the next free slot"
+          aria-label={`Αντιγραφή ${label} στην επόμενη ελεύθερη ώρα`}
+          title="Αντιγραφή στην επόμενη ελεύθερη ώρα"
         >
           <Copy />
         </Button>

@@ -11,7 +11,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-1">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <h1 className="text-2xl font-semibold">Με μια ματιά</h1>
       <p className="text-muted-foreground text-sm">
         Signed in as {rows[0]?.first_name ?? "unknown"}. Nothing here yet.
       </p>

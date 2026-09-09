@@ -7,8 +7,8 @@ export default async function NewPlanPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Add plan</h1>
-      <PlanForm action={createPlan} submitLabel="Create plan" />
+      <h1 className="text-2xl font-semibold">Νέο πακέτο</h1>
+      <PlanForm action={createPlan} submitLabel="Δημιουργία πακέτου" />
     </div>
   );
 }

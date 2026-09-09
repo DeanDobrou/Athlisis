@@ -26,7 +26,7 @@ export function DeleteMemberButton({
         action={formAction}
         onSubmit={(e) => {
           // Deleting is permanent, so confirm before the action fires.
-          if (!confirm(`Delete ${memberName}? This cannot be undone.`)) {
+          if (!confirm(`Διαγραφή ${memberName}; Η ενέργεια δεν αναιρείται.`)) {
             e.preventDefault();
           }
         }}
@@ -38,14 +38,14 @@ export function DeleteMemberButton({
             variant="ghost"
             size="icon-sm"
             disabled={pending}
-            aria-label={`Delete ${memberName}`}
-            title={`Delete ${memberName}`}
+            aria-label={`Διαγραφή ${memberName}`}
+            title={`Διαγραφή ${memberName}`}
           >
             <Trash2 className="text-destructive" />
           </Button>
         ) : (
           <Button type="submit" variant="destructive" disabled={pending}>
-            {pending ? "Deleting..." : "Delete"}
+            {pending ? "Γίνεται διαγραφή..." : "Διαγραφή"}
           </Button>
         )}
       </form>

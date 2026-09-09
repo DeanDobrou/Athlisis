@@ -10,9 +10,9 @@
 export type BillingInterval = "monthly" | "yearly" | "one_time";
 
 export const BILLING_INTERVALS: Record<BillingInterval, string> = {
-  monthly: "Monthly",
-  yearly: "Yearly",
-  one_time: "One time",
+  monthly: "Μηνιαίο",
+  yearly: "Ετήσιο",
+  one_time: "Εφάπαξ",
 };
 
 export function isBillingInterval(value: string): value is BillingInterval {
@@ -29,8 +29,8 @@ export type MembershipStatus = "active" | "inactive";
  * additive.
  */
 export const MEMBERSHIP_STATUSES: Record<MembershipStatus, string> = {
-  active: "Active",
-  inactive: "Inactive",
+  active: "Ενεργή",
+  inactive: "Ανενεργή",
 };
 
 export function isMembershipStatus(value: string): value is MembershipStatus {
@@ -55,11 +55,11 @@ export type MembershipState =
   | "inactive";
 
 export const MEMBERSHIP_STATES: Record<MembershipState, string> = {
-  active: "Active",
-  unpaid: "Unpaid",
-  completed: "Completed",
-  scheduled: "Scheduled",
-  inactive: "Inactive",
+  active: "Ενεργή",
+  unpaid: "Ανεξόφλητη",
+  completed: "Ολοκληρωμένη",
+  scheduled: "Προγραμματισμένη",
+  inactive: "Ανενεργή",
 };
 
 export function isMembershipState(value: string): value is MembershipState {
@@ -69,9 +69,9 @@ export function isMembershipState(value: string): value is MembershipState {
 export type PaymentMethod = "cash" | "pos_terminal" | "other";
 
 export const PAYMENT_METHODS: Record<PaymentMethod, string> = {
-  cash: "Cash",
-  pos_terminal: "Card",
-  other: "Other",
+  cash: "Μετρητά",
+  pos_terminal: "Κάρτα",
+  other: "Άλλο",
 };
 
 export function isPaymentMethod(value: string): value is PaymentMethod {

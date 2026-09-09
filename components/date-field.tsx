@@ -1,11 +1,13 @@
 "use client";
 
+import { el } from "date-fns/locale";
 import { CalendarIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
+import { formatDate } from "@/lib/gym-time";
 import {
   Popover,
   PopoverContent,
@@ -25,7 +27,7 @@ export function DateField({
   name,
   label,
   defaultValue = "",
-  placeholder = "Select a date",
+  placeholder = "Διάλεξε ημερομηνία",
   clearLabel,
   disabled,
   startMonth,
@@ -64,11 +66,12 @@ export function DateField({
             />
           }
         >
-          {date ? toISODate(date) : placeholder}
+          {date ? formatDate(toISODate(date)) : placeholder}
           <CalendarIcon />
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
+            locale={el}
             mode="single"
             selected={date}
             onSelect={(picked) => {

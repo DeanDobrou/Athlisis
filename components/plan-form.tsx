@@ -27,18 +27,18 @@ export function PlanForm({
     <form action={formAction} className="max-w-xl space-y-4">
       {plan && <input type="hidden" name="id" value={plan.id} />}
 
-      <Field id="name" label="Name">
+      <Field id="name" label="Όνομα">
         <Input
           id="name"
           name="name"
           defaultValue={plan?.name}
-          placeholder="Unlimited monthly"
+          placeholder="Απεριόριστο μηνιαίο"
           required
         />
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="price" label="Price (EUR)">
+        <Field id="price" label="Τιμή (EUR)">
           <Input
             id="price"
             name="price"
@@ -48,19 +48,19 @@ export function PlanForm({
             required
           />
         </Field>
-        <Field id="visits" label="Visits">
+        <Field id="visits" label="Επισκέψεις">
           <Input
             id="visits"
             name="visits"
             inputMode="numeric"
             defaultValue={plan?.visits ?? ""}
-            placeholder="Blank for unlimited"
+            placeholder="Κενό για απεριόριστες"
           />
         </Field>
       </div>
 
       <div className="grid gap-2">
-        <span className="text-sm font-medium">Billing interval</span>
+        <span className="text-sm font-medium">Συχνότητα χρέωσης</span>
         <RadioGroup
           name="billing_interval"
           defaultValue={plan?.billing_interval ?? "monthly"}
@@ -91,10 +91,10 @@ export function PlanForm({
 
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
-          {pending ? "Saving..." : submitLabel}
+          {pending ? "Αποθήκευση..." : submitLabel}
         </Button>
         <Link href="/plans" className={buttonVariants({ variant: "outline" })}>
-          Cancel
+          Άκυρο
         </Link>
       </div>
     </form>
