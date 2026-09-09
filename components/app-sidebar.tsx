@@ -20,20 +20,46 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
+// Grouped by how often staff touch a screen, not by how the tables relate.
+// The overview is the landing page, so it sits alone above everything. The
+// two setup screens moved to the bottom: they are filled in once and then
+// left, and sitting in the middle they split the two screens that are used
+// together all day. An empty label means the group renders without a heading.
 const nav = [
-  { title: "Με μια ματιά", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Μέλη", href: "/members", icon: Users },
-  { title: "Συνδρομές", href: "/memberships", icon: CreditCard },
-  { title: "Πακέτα", href: "/plans", icon: Tags },
-  { title: "Πρόγραμμα", href: "/schedule", icon: CalendarDays },
-  { title: "Τύποι μαθημάτων", href: "/class-types", icon: Shapes },
-  { title: "WODs", href: "/wods", icon: Dumbbell },
+  {
+    label: "",
+    items: [
+      { title: "Με μια ματιά", href: "/dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Προπόνηση",
+    items: [
+      { title: "Πρόγραμμα", href: "/schedule", icon: CalendarDays },
+      { title: "WODs", href: "/wods", icon: Dumbbell },
+    ],
+  },
+  {
+    label: "Μέλη",
+    items: [
+      { title: "Μέλη", href: "/members", icon: Users },
+      { title: "Συνδρομές", href: "/memberships", icon: CreditCard },
+    ],
+  },
+  {
+    label: "Ρυθμίσεις",
+    items: [
+      { title: "Πακέτα", href: "/plans", icon: Tags },
+      { title: "Τύποι μαθημάτων", href: "/class-types", icon: Shapes },
+    ],
+  },
 ];
 
 export function AppSidebar() {
@@ -45,28 +71,31 @@ export function AppSidebar() {
         Athlisis
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {nav.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    render={<Link href={item.href} />}
-                    // Exact, or a child route. A bare startsWith lit up
-                    // Members on /memberships, since that is a prefix.
-                    isActive={
-                      pathname === item.href ||
-                      pathname.startsWith(`${item.href}/`)
-                    }
-                  >
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {nav.map((group) => (
+          <SidebarGroup key={group.label || "overview"}>
+            {group.label && <SidebarGroupLabel>{group.label}</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      render={<Link href={item.href} />}
+                      // Exact, or a child route. A bare startsWith lit up
+                      // Members on /memberships, since that is a prefix.
+                      isActive={
+                        pathname === item.href ||
+                        pathname.startsWith(`${item.href}/`)
+                      }
+                    >
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
