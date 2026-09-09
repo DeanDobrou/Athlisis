@@ -39,19 +39,24 @@ export function isMembershipStatus(value: string): value is MembershipStatus {
 
 /**
  * What a membership actually is today: the stored status read together with
- * the period. Derived on every read, never stored, so it cannot go stale and
- * needs no scheduled job to move a membership on when its period ends.
+ * the period and paid_on. Derived on every read, never stored, so it cannot go
+ * stale and needs no scheduled job to move a membership on when its period
+ * ends, or to mark one paid when the cash arrives.
  *
- * Staff still only ever choose Active or Inactive.
+ * Staff still only ever choose Active or Inactive. Unpaid is not a status a
+ * human sets: it is paid_on being empty, which is how a membership the mobile
+ * app created on a promise to pay reads until someone collects the money.
  */
 export type MembershipState =
   | "active"
+  | "unpaid"
   | "completed"
   | "scheduled"
   | "inactive";
 
 export const MEMBERSHIP_STATES: Record<MembershipState, string> = {
   active: "Active",
+  unpaid: "Unpaid",
   completed: "Completed",
   scheduled: "Scheduled",
   inactive: "Inactive",
@@ -59,4 +64,16 @@ export const MEMBERSHIP_STATES: Record<MembershipState, string> = {
 
 export function isMembershipState(value: string): value is MembershipState {
   return Object.hasOwn(MEMBERSHIP_STATES, value);
+}
+
+export type PaymentMethod = "cash" | "pos_terminal" | "other";
+
+export const PAYMENT_METHODS: Record<PaymentMethod, string> = {
+  cash: "Cash",
+  pos_terminal: "Card",
+  other: "Other",
+};
+
+export function isPaymentMethod(value: string): value is PaymentMethod {
+  return Object.hasOwn(PAYMENT_METHODS, value);
 }

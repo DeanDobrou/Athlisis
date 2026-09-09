@@ -187,7 +187,7 @@ export async function deleteMember(
     if (isStillReferenced(err)) {
       return {
         error:
-          "This member has bookings, payments or membership history on record and cannot be deleted.",
+          "This member has bookings, sessions, WODs or membership history on record and cannot be deleted.",
       };
     }
     throw err;

@@ -14,7 +14,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getMember } from "@/lib/members";
-import { listMembershipsForMember } from "@/lib/memberships";
+import {
+  hasCoverageToday,
+  listMembershipsForMember,
+} from "@/lib/memberships";
 import { requireAdmin } from "@/lib/session";
 
 export default async function MemberPage({
@@ -29,7 +32,10 @@ export default async function MemberPage({
   if (!member) notFound();
 
   const memberships = await listMembershipsForMember(Number(member.id));
-  const covered = memberships.some((m) => m.state === "active");
+  // Not derived from the badges: an unpaid membership covers today but reads
+  // as Unpaid rather than Active, so counting Active badges calls a member
+  // training on a promise uncovered. coversDate() is the only definition.
+  const covered = await hasCoverageToday(Number(member.id));
 
   const isSelf = Number(member.id) === admin.userId;
   const fullName = `${member.first_name} ${member.last_name}`;

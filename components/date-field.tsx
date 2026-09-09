@@ -26,6 +26,7 @@ export function DateField({
   label,
   defaultValue = "",
   placeholder = "Select a date",
+  clearLabel,
   disabled,
   startMonth,
   endMonth,
@@ -36,6 +37,8 @@ export function DateField({
   label: string;
   defaultValue?: string;
   placeholder?: string;
+  /** Pass a label to let the field be emptied again; the button says this. */
+  clearLabel?: string;
   /** Passed through to the calendar, eg { dayOfWeek: [0, 6] } for weekends. */
   disabled?: React.ComponentProps<typeof Calendar>["disabled"];
   startMonth?: Date;
@@ -79,6 +82,22 @@ export function DateField({
             defaultMonth={date ?? defaultMonth}
             autoFocus
           />
+          {clearLabel && (
+            <div className="border-t p-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setDate(undefined);
+                  setOpen(false);
+                }}
+              >
+                {clearLabel}
+              </Button>
+            </div>
+          )}
         </PopoverContent>
       </Popover>
     </div>

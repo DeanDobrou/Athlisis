@@ -6,6 +6,7 @@ const VARIANTS: Record<
   "default" | "secondary" | "outline" | "destructive"
 > = {
   active: "secondary",
+  unpaid: "default",
   completed: "outline",
   scheduled: "outline",
   inactive: "destructive",

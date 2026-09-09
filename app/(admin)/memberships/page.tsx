@@ -14,11 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PAYMENT_METHODS } from "@/lib/enums";
 import {
   listMemberships,
   PAGE_SIZE,
   type MembershipFilter,
 } from "@/lib/memberships";
+import { formatCents } from "@/lib/money";
 import { listPlans } from "@/lib/plans";
 import { requireAdmin } from "@/lib/session";
 
@@ -72,6 +74,8 @@ export default async function MembershipsPage({
                 <TableHead>Starts</TableHead>
                 <TableHead>Ends</TableHead>
                 <TableHead>Visits left</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Paid on</TableHead>
                 <TableHead>State</TableHead>
                 <TableHead className="w-[60px] text-right">Actions</TableHead>
               </TableRow>
@@ -91,6 +95,17 @@ export default async function MembershipsPage({
                   <TableCell>{ms.starts_on}</TableCell>
                   <TableCell>{ms.ends_on ?? "Open ended"}</TableCell>
                   <TableCell>{ms.visits_remaining ?? "Unlimited"}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    €{formatCents(ms.amount_cents)}
+                    <span className="text-muted-foreground ml-1 text-xs">
+                      {PAYMENT_METHODS[ms.method]}
+                    </span>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {ms.paid_on ?? (
+                      <span className="text-muted-foreground">Not paid</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <MembershipStateBadge state={ms.state} />
                   </TableCell>

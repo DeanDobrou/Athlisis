@@ -6,6 +6,7 @@ import {
   type BillingInterval,
   type MembershipState,
   type MembershipStatus,
+  type PaymentMethod,
 } from "@/lib/enums";
 
 export type Membership = {
@@ -19,6 +20,9 @@ export type Membership = {
   starts_on: string;
   ends_on: string | null;
   visits_remaining: number | null;
+  amount_cents: number;
+  method: PaymentMethod;
+  paid_on: string | null;
   state: MembershipState;
 };
 
@@ -28,9 +32,14 @@ export type Membership = {
  * coverage, and a row that has run out is not coverage. A NULL ends_on is an
  * open-ended period, so it never completes.
  *
- * membershipState() above splits the false cases into scheduled / completed /
- * inactive for display; this returns the plain yes-or-no the booking service
- * needs.
+ * membershipState() below turns the same columns plus paid_on into the badge
+ * staff read. It answers a different question and must never be used as a
+ * substitute for this one - see the note there.
+ *
+ * paid_on is deliberately not read here. An unpaid period is still coverage:
+ * the member may train on the promise to pay. What they may not do is make a
+ * second promise, and that is a separate rule in the booking service, not a
+ * question about whether today is covered.
  *
  * `param` is a placeholder or SQL date expression supplied by the caller,
  * never user input.
@@ -42,17 +51,26 @@ export function coversDate(param: string, alias = "m"): string {
 }
 
 /**
- * The display state, derived from the same three columns as coversDate(). The
- * order matters: a status an admin set to inactive wins over the dates, and a
- * membership that has not begun reads as scheduled rather than completed.
+ * The display state, derived from the same columns as coversDate() plus
+ * paid_on. The order matters: a status an admin set to inactive wins over
+ * everything, money owed wins over the dates because it is the thing staff
+ * must act on, and a membership that has not begun reads as scheduled rather
+ * than completed.
  *
- * 'active' here is exactly coversDate() being true, by construction, so the
- * column shown in the grid and the answer the booking service gets can never
- * disagree.
+ * The relationship to coversDate() runs one way only. 'active' is coversDate()
+ * being true *and* the money collected, so coverage implies 'active' or
+ * 'unpaid' - never the reverse. An unpaid row is not tested against the dates
+ * at all, so one that is scheduled, or whose period ended months ago, still
+ * reads Unpaid. That is deliberate: a debt has to stay visible in the ledger
+ * until someone collects it.
+ *
+ * So the badge is not a coverage check. Anything deciding whether a member may
+ * train calls coversDate() (or hasCoverageToday()), never this.
  */
 export function membershipState(alias = "m"): string {
   return `CASE
     WHEN ${alias}.status <> 'active' THEN 'inactive'
+    WHEN ${alias}.paid_on IS NULL THEN 'unpaid'
     WHEN ${alias}.starts_on > current_date THEN 'scheduled'
     WHEN ${alias}.ends_on IS NOT NULL AND ${alias}.ends_on < current_date
       THEN 'completed'
@@ -90,6 +108,8 @@ const COLUMNS = `m.id, m.user_id, m.plan_id, p.name AS plan_name,
   to_char(m.starts_on, 'YYYY-MM-DD') AS starts_on,
   to_char(m.ends_on, 'YYYY-MM-DD') AS ends_on,
   m.visits_remaining,
+  m.amount_cents, m.method,
+  to_char(m.paid_on, 'YYYY-MM-DD') AS paid_on,
   ${membershipState()} AS state`;
 
 export async function listMembershipsForMember(
@@ -112,9 +132,7 @@ export function parseMembershipId(raw: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-export async function getMembership(
-  rawId: string,
-): Promise<Membership | null> {
+export async function getMembership(rawId: string): Promise<Membership | null> {
   const id = parseMembershipId(rawId);
   if (id === null) return null;
 

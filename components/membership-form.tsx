@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import type { MembershipFormState } from "@/app/actions/memberships";
 import { DateField } from "@/components/date-field";
@@ -16,9 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MEMBERSHIP_STATUSES } from "@/lib/enums";
+import { MEMBERSHIP_STATUSES, PAYMENT_METHODS } from "@/lib/enums";
 import { todayInGym } from "@/lib/gym-time";
 import type { Member } from "@/lib/members";
+import { formatCents } from "@/lib/money";
 import type { Membership } from "@/lib/memberships";
 import type { Plan } from "@/lib/plans";
 
@@ -39,6 +40,18 @@ export function MembershipForm({
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
+
+  // The plan drives the amount: a period is nearly always sold at its list
+  // price, so choosing the plan fills it in and typing over it is the
+  // exception rather than the routine.
+  const [planId, setPlanId] = useState(
+    membership?.plan_id ?? plans[0]?.id ?? "",
+  );
+  const [amount, setAmount] = useState(() =>
+    membership
+      ? formatCents(membership.amount_cents)
+      : formatCents(plans[0]?.price_cents ?? 0),
+  );
 
   const memberItems = Object.fromEntries(
     members.map((m) => [m.id, `${m.first_name} ${m.last_name}`]),
@@ -74,7 +87,13 @@ export function MembershipForm({
         <Select
           name="plan_id"
           items={planItems}
-          defaultValue={membership?.plan_id ?? plans[0]?.id}
+          value={planId}
+          onValueChange={(value) => {
+            const next = String(value);
+            setPlanId(next);
+            const chosen = plans.find((p) => p.id === next);
+            if (chosen) setAmount(formatCents(chosen.price_cents));
+          }}
         >
           <SelectTrigger id="plan_id" className="w-full">
             <SelectValue />
@@ -87,6 +106,55 @@ export function MembershipForm({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="amount">Price (EUR)</Label>
+          <Input
+            id="amount"
+            name="amount"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+          />
+        </div>
+        <DateField
+          name="paid_on"
+          label="Paid on"
+          placeholder="Not paid yet"
+          clearLabel="Not paid yet"
+          defaultValue={
+            membership ? (membership.paid_on ?? "") : todayInGym()
+          }
+        />
+      </div>
+
+      <p className="text-muted-foreground text-xs">
+        The price is what the period costs. Zero means it was granted rather
+        than sold. Clearing the date leaves the money uncollected, and the
+        membership reads as Unpaid until someone records it.
+      </p>
+
+      <div className="grid gap-2">
+        <span className="text-sm font-medium">Method</span>
+        <RadioGroup
+          name="method"
+          defaultValue={membership?.method ?? "cash"}
+          className="gap-3 sm:flex sm:gap-6"
+        >
+          {Object.entries(PAYMENT_METHODS).map(([value, label]) => (
+            <Label
+              key={value}
+              htmlFor={`method_${value}`}
+              className="flex items-center gap-2"
+            >
+              <RadioGroupItem id={`method_${value}`} value={value} />
+              {label}
+            </Label>
+          ))}
+        </RadioGroup>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
