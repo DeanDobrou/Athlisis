@@ -13,8 +13,8 @@ product for gyms in general; a product for this gym.
 and the leaderboard follow after the MVP.
 
 **Gym staff (web dashboard):** manage the schedule, program WODs, manage
-members and memberships, record payments, track attendance, chase unpaid
-bookings.
+members and memberships, take cash at the desk, check people in, chase what is
+owed.
 
 The retention engine is score logging → leaderboard; that lands post-MVP.
 Friendly rivalry is what keeps CrossFit members showing up. Until then the MVP
@@ -87,12 +87,11 @@ get a one-row `settings` table in the migration that brings bookings.
 |---|---|---|
 | 1 | `users` | members and admins (role enum) |
 | 2 | `plans` | membership products; `one_time` + `visits` = visit pack |
-| 3 | `memberships` | user ↔ plan; a user may hold several (see §8) |
+| 3 | `memberships` | user ↔ plan *and* the money for that period (§8); several per user |
 | 4 | `class_types` | WOD, Open Gym, Foundations (seeded) |
 | 5 | `class_sessions` | a concrete class on the calendar |
 | 6 | `bookings` | user ↔ session, status lifecycle + entitlement source |
 | 7 | `wods` | programmed workout for a date; `published_at` = draft/live |
-| 8 | `payments` | charge log; manual in MVP |
 
 Landing with bookings: `settings` (one row) and `closures` (§8).
 
@@ -104,6 +103,22 @@ re-points the column - the pattern to copy if another enum ever loses a value.
 `003_unique_lower_email.sql` made email uniqueness case-insensitive.
 `004_drop_emergency_contact.sql` dropped `users.emergency_contact`: the member
 form no longer collects it and nothing read it.
+
+`012_fold_payments_into_memberships.sql` **deleted the `payments` table** and
+moved `amount_cents`, `method`, `paid_on` and `recorded_by` onto `memberships`.
+The two were strictly 1:1 and modelling them apart let them disagree: within a
+day of use the live data already held a payment attached to no period and a
+period with no payment, so "has this member paid?" had no single answer. With
+the money on the row, no row means no payment and no coverage, by construction.
+`payment_status` went with it - cash is taken or it is not.
+
+`013_membership_paid_on_nullable.sql` let `paid_on` be NULL again. `012` had
+assumed every membership was typed in by staff with cash in hand; §8's unpaid
+membership is written before the money exists. NULL is the promise to pay.
+
+`014_unpaid_membership_owes_something.sql` added
+`CHECK (paid_on IS NOT NULL OR amount_cents > 0)`: zero stays a legitimate
+price for a comp or a trial, but only once the money question is settled.
 
 **Deferred to post-MVP: `wod_scores`.** Scores, the leaderboard and benchmarks
 are out of the MVP, so the table was dropped rather than left empty. The design
@@ -118,9 +133,10 @@ work is not lost - see "Scores, when they return" below.
 - **Unique (user, session)** on bookings. Cancel-then-rebook is therefore an
   `UPDATE`, so the booking service is upsert-shaped - there is never a second
   row.
-- **`bookings.entitlement_source`** (`subscription` | `visit` | `unpaid`)
-  records *how* each booking was paid for. Without it you cannot tell which
-  bookings owe money, and cancellation cannot know whether to refund a visit.
+- **`bookings.entitlement_source`** (`subscription` | `visit`) records *how*
+  each booking was paid for, so cancellation knows whether to refund a visit.
+  The third value, `unpaid`, is now dead: §8 puts the debt on the membership
+  instead, so every booking is covered by one, paid or owed.
 - **Capacity is not a DB constraint** - it is a count across rows. The booking
   transaction must `SELECT ... FOR UPDATE` the session row, or concurrent
   requests will oversell the class. Entitlement resolution happens in that
@@ -296,23 +312,168 @@ Resolved inside the booking transaction, in this order:
 
 1. **Active subscription** covering the session date, unlimited → book.
 2. **Visits remaining** on an active plan → decrement, book.
-3. **Neither** → an **unpaid** booking, allowed only if the member has no other
-   unpaid booking in the same calendar month.
+3. **Neither** → offer an **unpaid membership** (below), then book against it.
 
 The order matters: check subscription *first*, or a member holding both a
 subscription and a leftover visit pack silently burns pack visits.
 
-**The one-unpaid-per-month allowance** is the grace slot - a member can book
-before settling up, once per month. Enforced in the service layer, not as a DB
-constraint: the rule spans `bookings` and `class_sessions` (the month comes
-from the session date), so a unique index would mean denormalising the date
-onto bookings and risking drift when a session is rescheduled. The transaction
-already needed for capacity is the right place. The allowance lives in
-`settings` so it can be changed without a deploy.
-
 **Cancellation** reads `entitlement_source`: a `visit` booking returns the
-visit, an `unpaid` one frees the monthly slot, a `subscription` one does
-nothing.
+visit, a `subscription` one does nothing. An unpaid membership is not a third
+case - the booking that created it is a `visit` or `subscription` booking like
+any other, and cancelling it returns the visit to a pack that is still owed
+for.
+
+### Booking with no coverage: the unpaid membership
+
+The gym takes cash, in person, but bookings happen online the night before. At
+the moment someone books there is no way for money to have changed hands. So a
+member whose visits or month have run out is not cheating when they book - they
+are promising to pay on arrival, which is the only order of events a cash gym
+can actually have. Nobody pays first and trains three days later.
+
+**The rule: booking with no coverage creates the next membership, unpaid.**
+
+A member out of visits taps a class. The app tells them plainly that they are
+out, that they may book this one, and that they will pay when they arrive. On
+confirm, one transaction writes two rows: a new membership on the plan they
+last held, priced from that plan with `paid_on` left NULL, and the booking,
+consuming one visit from it.
+
+**One rule guards it: a member with an unpaid membership cannot book again.**
+Not a visit count, not a calendar - the debt itself is the gate. The pack keeps
+its full remaining visits and they simply cannot be spent until the money
+arrives. When staff record the payment, everything left on it unlocks at once.
+
+**`paid_on` is the whole mechanism.** `amount_cents` is what the period costs;
+`paid_on` is when it was collected, and NULL means not yet. `membershipState()`
+reads the two together and returns `unpaid`, so nothing has to be written when
+the cash arrives beyond the date itself - no status to flip, nothing to go
+stale, no nightly job. Migration `013` made the column nullable for exactly
+this; `012` had assumed every membership was typed in by staff with cash in
+hand.
+
+**`coversDate()` deliberately ignores `paid_on`.** An unpaid period *is*
+coverage: the member may train on the promise. What they may not do is make a
+second promise, so the booking service asks two separate questions - "is this
+date covered" and "do you already owe me" - rather than one confused one.
+
+**The badge is not a coverage check.** The relationship runs one way only:
+`active` is `coversDate()` being true *and* the money collected, so coverage
+implies `active` or `unpaid`, never the reverse. `membershipState()` tests
+`paid_on` *before* the dates, so a row that is unpaid and scheduled, or unpaid
+and long finished, still reads `Unpaid` - deliberately, because a debt has to
+stay visible in the ledger until someone collects it. Anything deciding
+whether a member may train calls `coversDate()` or `hasCoverageToday()`; a
+screen that counts `Active` badges instead will tell a member training on a
+promise that they have no coverage.
+
+**Which plan gets created:** the one they last held. A monthly member gets an
+unpaid month, a pack member an unpaid pack, and neither needs a choice in the
+app. A person who has never held a membership has no plan to copy, so the app
+cannot offer this and staff set them up at the desk - which matches §10, where
+accounts are created by staff anyway.
+
+**Deleting an unpaid membership is allowed**, and is the only membership delete
+that is. `paid_on` being set is the whole test, and the dates have nothing to
+do with it: a prepaid month starting next week is as much a record of cash as
+one that started today, and destroying either destroys the only copy. Set it
+inactive instead. An unpaid row records money that never arrived, so a member
+who booked on a promise, never came and never paid leaves one staff can void.
+A paid row entered by mistake is edited, or has its date cleared first, which
+is the right amount of friction for deleting a receipt. The guard is the
+`DELETE`'s own `WHERE`, so nothing can change between deciding and deleting.
+
+**A zero-priced plan is created paid, never unpaid.** There is nothing to
+collect, so `paid_on` is set at creation. Migration `014` enforces it -
+`CHECK (paid_on IS NOT NULL OR amount_cents > 0)` - because a row owing zero
+that nobody has paid is not a state worth being able to write. This is not a
+hypothetical branch: the gym already sells 'Friends of the gym' at 0 cents.
+
+**`recorded_by` exists exactly when `paid_on` does.** It means the admin who
+took the money, so an unpaid row has none, and whoever settles it later gets
+stamped then. Clearing the date takes the recorder with it. One `CASE` says so
+in both the insert and the update rather than two rules drifting apart. (Not a
+database constraint: `012` backfilled `paid_on` for periods with no payment
+row, so one live row has a date and no recorder, and enforcing the pairing
+would mean inventing a recorder for cash nobody recorded.)
+
+**Staff view:** the memberships grid shows `Unpaid` as a solid badge with the
+amount owed, and it filters like any other state. That list is the debt ledger;
+there is no separate payments screen, because there is no separate payments
+table.
+
+### What this replaced
+
+The original design gave every member **one unpaid booking per calendar
+month**, tracked on `bookings.entitlement_source = 'unpaid'` and settled
+against a `payments` row. It was dropped for three reasons:
+
+- **It never cleared when they paid.** Cancelling an unpaid booking freed the
+  slot; settling it did not. A member who booked on the 3rd and paid the same
+  evening stayed blocked until the 1st, despite owing nothing.
+- **The calendar month tracked nothing real.** The question is "does this
+  person owe me money right now", and a date has no opinion on it.
+- **It needed machinery.** A `settings` key for the allowance, a join from
+  `bookings` to `class_sessions` inside the booking transaction just to work
+  out which month a class fell in, and somewhere to record the settling cash
+  once `payments` was folded into `memberships` by `012`.
+
+The replacement needs none of that: one nullable column, already there.
+**Consequence: `entitlement_source = 'unpaid'` is now dead.** Every booking is
+covered by a membership, paid or owed. Drop the value with the `002` pattern
+when the booking service lands, or leave it as a harmless spare.
+
+Note the rule cannot be a database constraint either way: it spans memberships
+and bookings and needs the transaction that capacity already requires. Service
+layer, same as before.
+
+### Check-in
+
+Check-in exists for three reasons, and entitlement is not one of them: it is
+the moment cash is collected from a member who owes, it turns a booking into
+attendance history, and it is what marks a no-show.
+
+**Visits are deducted at booking, never at check-in.** Booking is the only
+moment the system can say no. If a visit were only spent on arrival, a member
+with one left could hold Monday, Tuesday and Wednesday against it, and
+`visits_remaining` would stop being a real number in a column and become a
+calculation - remaining minus outstanding bookings - that every caller would
+have to repeat and keep in step. Deducting at booking keeps the counter always
+true. Cancelling in time returns the visit; not turning up burns it, which is
+the incentive that makes people cancel.
+
+**A walk-in is a check-in that creates the booking**, consuming a visit the
+same way, so there is one accounting path rather than two.
+
+**Staff check-in is the one that matters** and ships first, because the whole
+unpaid design rests on someone at the desk seeing `Unpaid` beside a name and
+asking for the money.
+
+**Member self-check-in from the app is deferred.** It is convenience, not
+control - a member can tap it from the car park, and if they do the prompt to
+collect their debt never appears. If it lands later, the cheap guard is a time
+window (from fifteen minutes before the class until it ends), not geofencing or
+QR codes.
+
+### The two admin calendars
+
+`/schedule` is a **management** grid: build the week, create and edit and copy
+classes. It knows about sessions, not people.
+
+Check-in needs a second screen, a **day view**: pick a date, see that day's
+classes, open one and get the roster - who booked, in what order, waitlist
+included, with a check-in control and an `Unpaid` flag beside each name. This
+is the same calendar members see in the app, plus the attendance controls, and
+it is where staff will spend opening hours.
+
+**They stay two screens.** The week grid answers "what is the gym running this
+week"; the day view answers "who is standing in front of me". Different people,
+different times of day. Merging them produces a page cluttered for both jobs.
+
+Staff also need to book a member onto a class from that day view, since not
+every member will use the app, and a booking made by staff resolves entitlement
+through exactly the same path as one made from the phone - including creating
+an unpaid membership when there is no coverage.
 
 ### Visit pacing: one hard rule, one soft one
 
@@ -339,8 +500,9 @@ charged for. Two rules instead:
 Both need `bookings` rows to exist, so both are built with the booking service
 in step 5, not before.
 
-**Staff view:** a dashboard list of members with unpaid bookings. Without it
-the grace slot is leakage rather than a convenience.
+**Staff view:** the memberships grid filtered to `Unpaid` (§8). Without
+somewhere that lists what is owed, booking on a promise is leakage rather than
+a convenience.
 
 ### Visit packs - the August case
 
@@ -454,11 +616,12 @@ Two guards, in this order:
 
 1. **An active membership blocks it** - checked explicitly so the message can
    say so: end the membership first.
-2. **Anything else that references the row blocks it too.** Six foreign keys
-   point at `users` (`bookings`, `memberships`, `payments` twice,
-   `class_sessions.coach_id`, `wods.created_by`), all `NO ACTION`, so the
-   `DELETE` raises `23503` and the action turns that into "has bookings,
-   payments or membership history and cannot be deleted" rather than a 500.
+2. **Anything else that references the row blocks it too.** Five foreign keys
+   point at `users` (`bookings`, `memberships` twice - as the member and as
+   `recorded_by`, the admin who took the money - `class_sessions.coach_id`,
+   `wods.created_by`), all `NO ACTION`, so the `DELETE` raises `23503` and the
+   action turns that into "has bookings, sessions, WODs or membership history
+   and cannot be deleted" rather than a 500.
 
 The second guard is what stops attendance and payment records being orphaned;
 the first exists to give the common case a message that says what to do about
@@ -500,6 +663,10 @@ members screen ships.
 | `db/migrations/002_drop_banned_status.sql` | `user_status` loses `banned` | applied |
 | `db/migrations/003_unique_lower_email.sql` | case-insensitive email uniqueness | applied |
 | `db/migrations/004_drop_emergency_contact.sql` | drops `users.emergency_contact` | applied |
+| `db/migrations/005-011_*.sql` | plan, membership and schedule refinements | applied |
+| `db/migrations/012_fold_payments_into_memberships.sql` | drops `payments`; money moves onto `memberships` | applied |
+| `db/migrations/013_membership_paid_on_nullable.sql` | `paid_on` NULL = owed, not paid (§8) | applied |
+| `db/migrations/014_unpaid_membership_owes_something.sql` | an unpaid period must owe something | applied |
 | `lib/db.ts` | single pool + `withTransaction` | done |
 | `scripts/migrate.mjs` | migration runner (`--dry-run`) | done |
 | `app/api/health/route.ts` | connectivity smoke test | done |
@@ -561,10 +728,12 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
    and update forms. Outstanding: the welcome email, which is blocked on the
    transport decision in §10. Bookings need members to exist, so this comes
    before the schedule.
-5. Schedule + bookings - capacity, waitlists, check-in, entitlement
-   resolution; brings `settings`, `closures` and the session generator
-6. WODs - program, publish, show on the schedule
-7. Manual payments dashboard, incl. the unpaid-bookings list
+5. Schedule + bookings - capacity, waitlists, entitlement resolution and the
+   unpaid membership (§8); brings `settings` and the session generator
+6. Check-in - the admin **day view**: a date, its classes, each class's roster
+   with a check-in control and the `Unpaid` flag staff collect against. Staff
+   booking a member on from the same screen. Member self-check-in deferred
+7. WODs - program, publish, show on the schedule
 
 **Then:** mobile app (Expo) → pull sync → scores + leaderboard (brings push sync with them) → push notifications → benchmarks.
 
