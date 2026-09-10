@@ -67,13 +67,17 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="px-4 py-3 text-lg font-semibold">
+      <SidebarHeader className="px-4 py-4 font-heading text-xl font-semibold tracking-wide">
         Athlisis
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="font-heading">
         {nav.map((group) => (
           <SidebarGroup key={group.label || "overview"}>
-            {group.label && <SidebarGroupLabel>{group.label}</SidebarGroupLabel>}
+            {group.label && (
+              <SidebarGroupLabel className="tracking-wider uppercase">
+                {group.label}
+              </SidebarGroupLabel>
+            )}
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => (
@@ -97,7 +101,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="font-heading">
         <SidebarMenu>
           <SidebarMenuItem>
             <form action={logout}>
