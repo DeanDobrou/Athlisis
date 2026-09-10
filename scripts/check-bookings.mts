@@ -1,0 +1,307 @@
+/**
+ * Runnable check for lib/bookings.ts against the real database.
+ *
+ *   npm run check:bookings
+ *
+ * Everything happens inside one transaction that is always rolled back, so it
+ * leaves no rows behind and is safe against the dev database at any time.
+ * Fixtures use dates in 2031 so nothing collides with real schedule data.
+ *
+ * It imports the real lib files rather than copies of their SQL. Two things
+ * make that work under plain Node: a resolve hook for the @/ alias, and the
+ * react-server condition, which turns import "server-only" into a no-op.
+ */
+import { register } from "node:module";
+
+const root = new URL("../", import.meta.url).href;
+register(
+  "data:text/javascript," +
+    encodeURIComponent(`
+export async function resolve(specifier, context, next) {
+  if (specifier.startsWith("@/")) {
+    for (const ext of [".ts", ".tsx", "/index.ts"]) {
+      try {
+        return await next(${JSON.stringify(root)} + specifier.slice(2) + ext, context);
+      } catch {}
+    }
+  }
+  return next(specifier, context);
+}`),
+);
+
+const { db } = await import("@/lib/db");
+const { bookMember, cancelBooking, voidUnpaidMembership } = await import(
+  "@/lib/bookings"
+);
+
+const client = await db().connect();
+const failed: string[] = [];
+let passed = 0;
+const check = (ok: boolean, label: string) => {
+  if (ok) passed++;
+  else failed.push(label);
+  console.log(`${ok ? "PASS" : "FAIL"}  ${label}`);
+};
+
+try {
+  await client.query("BEGIN");
+
+  const one = async <T,>(sql: string, params: unknown[] = []) =>
+    (await client.query(sql, params)).rows[0] as T;
+  const newId = async (sql: string, params: unknown[]) =>
+    Number((await one<{ id: string }>(sql, params)).id);
+
+  const user = (tag: string) =>
+    newId(
+      `INSERT INTO users (email, password_hash, first_name, last_name)
+       VALUES ($1, 'x', 'Check', $2) RETURNING id`,
+      [`check-bookings-${tag}@test.local`, tag],
+    );
+  const plan = (visits: number | null, price: number, interval = "one_time") =>
+    newId(
+      `INSERT INTO plans (name, price_cents, currency, billing_interval, visits)
+       VALUES ('check plan', $1, 'EUR', $2, $3) RETURNING id`,
+      [price, interval, visits],
+    );
+  const session = (day: string, capacity = 10, status = "scheduled") =>
+    newId(
+      `INSERT INTO class_sessions (starts_at, ends_at, capacity, status)
+       VALUES ($1::date + time '18:00', $1::date + time '19:00', $2, $3)
+       RETURNING id`,
+      [day, capacity, status],
+    );
+  const membership = (
+    u: number,
+    p: number,
+    visits: number | null,
+    startsOn = "2031-01-01",
+    endsOn: string | null = null,
+  ) =>
+    newId(
+      `INSERT INTO memberships
+         (user_id, plan_id, starts_on, ends_on, visits_remaining, amount_cents, paid_on)
+       VALUES ($1, $2, $3, $4, $5, 5000, '2031-01-01') RETURNING id`,
+      [u, p, startsOn, endsOn, visits],
+    );
+  const visitsOf = async (m: number | string) =>
+    (
+      await one<{ v: number | null }>(
+        "SELECT visits_remaining AS v FROM memberships WHERE id = $1",
+        [m],
+      )
+    ).v;
+  const book = (u: number, s: number) => bookMember(client, u, s, null);
+  const unlimitedMarch = async (u: number) =>
+    membership(
+      u,
+      await plan(null, 6000, "monthly"),
+      null,
+      "2031-03-01",
+      "2031-04-01",
+    );
+
+  const MON = "2031-03-03";
+  const TUE = "2031-03-04";
+  const WED = "2031-03-05";
+  const THU = "2031-03-06";
+  const FRI = "2031-03-07";
+
+  {
+    const u = await user("never");
+    const r = await book(u, await session(MON));
+    check(
+      !r.ok && r.error.includes("δεν είχε ποτέ"),
+      "never held a membership: refused, staff set up the first",
+    );
+  }
+
+  {
+    const u = await user("both");
+    const unlimited = await unlimitedMarch(u);
+    const pack = await membership(u, await plan(10, 3000), 10);
+    const r = await book(u, await session(MON));
+    check(
+      r.ok && Number(r.membershipId) === unlimited,
+      "an unlimited membership pays before a pack",
+    );
+    check(
+      (await visitsOf(pack)) === 10,
+      "the pack keeps every visit when unlimited covers the class",
+    );
+  }
+
+  const packUser = await user("pack");
+  const pack = await membership(packUser, await plan(3, 3000), 3);
+  const monSession = await session(MON);
+  const first = await book(packUser, monSession);
+  check(
+    first.ok && Number(first.membershipId) === pack && !first.createdMembership,
+    "a pack pays when nothing unlimited covers",
+  );
+  check((await visitsOf(pack)) === 2, "booking spends one visit");
+  const firstBooking = first.ok ? Number(first.bookingId) : 0;
+  const recorded = await one<{ m: string }>(
+    "SELECT membership_id AS m FROM bookings WHERE id = $1",
+    [firstBooking],
+  );
+  check(
+    Number(recorded.m) === pack,
+    "the booking records which membership paid",
+  );
+
+  {
+    const s = await session(TUE);
+    await book(packUser, s);
+    const again = await book(packUser, s);
+    check(
+      !again.ok && again.error.includes("σε αυτό το μάθημα"),
+      "the same class twice: refused",
+    );
+    const sameDay = await book(packUser, await session(TUE));
+    check(
+      !sameDay.ok && sameDay.error.includes("εκείνη την ημέρα"),
+      "a second class the same day: refused",
+    );
+  }
+
+  {
+    const s = await session(WED, 1);
+    const a = await user("cap-a");
+    const b = await user("cap-b");
+    await unlimitedMarch(a);
+    await unlimitedMarch(b);
+    const taken = await book(a, s);
+    const refused = await book(b, s);
+    check(
+      taken.ok && !refused.ok && refused.error.includes("γεμάτο"),
+      "a full class refuses the next member",
+    );
+  }
+
+  {
+    const before = Number(await visitsOf(pack));
+    const cancelled = await cancelBooking(client, firstBooking);
+    check(
+      cancelled.ok && (await visitsOf(pack)) === before + 1,
+      "cancelling returns the visit to the pack that paid",
+    );
+    const again = await cancelBooking(client, firstBooking);
+    check(
+      !again.ok,
+      "a booking that is no longer active cannot be cancelled again",
+    );
+    const rebook = await book(packUser, monSession);
+    check(
+      rebook.ok && Number(rebook.bookingId) === firstBooking,
+      "rebooking a cancelled class reuses the same row",
+    );
+    check((await visitsOf(pack)) === before, "and spends the visit again");
+  }
+
+  {
+    const u = await user("promise");
+    const p = await plan(12, 6000);
+    const usedUp = await membership(u, p, 0);
+    const r = await book(u, await session(THU));
+    check(
+      r.ok && r.createdMembership,
+      "no coverage: the booking creates the next membership",
+    );
+    const madeId = r.ok ? r.membershipId : "0";
+    const made = await one<{
+      paid_on: string | null;
+      amount_cents: number;
+      starts_on: string;
+      plan_id: string;
+      visits_remaining: number;
+    }>(
+      `SELECT paid_on, amount_cents, to_char(starts_on, 'YYYY-MM-DD') AS starts_on,
+              plan_id, visits_remaining
+       FROM memberships WHERE id = $1`,
+      [madeId],
+    );
+    check(
+      made.paid_on === null && made.amount_cents === 6000,
+      "it is created unpaid, priced from the plan",
+    );
+    check(
+      Number(made.plan_id) === p && made.starts_on === THU,
+      "on the plan last held, starting on the class day",
+    );
+    check(
+      made.visits_remaining === 11,
+      "and the booking spends one of its visits",
+    );
+
+    const gated = await book(u, await session(FRI));
+    check(
+      !gated.ok && gated.error.includes("χρωστάει"),
+      "a member who owes cannot book again",
+    );
+
+    await client.query(
+      "UPDATE bookings SET status = 'checked_in', checked_in_at = now() WHERE membership_id = $1",
+      [madeId],
+    );
+    const trained = await voidUnpaidMembership(client, Number(madeId));
+    check(
+      !trained.ok && trained.error.includes("προπονήθηκε"),
+      "voiding refuses once the member trained on it",
+    );
+
+    await client.query(
+      "UPDATE bookings SET status = 'booked', checked_in_at = NULL WHERE membership_id = $1",
+      [madeId],
+    );
+    const voided = await voidUnpaidMembership(client, Number(madeId));
+    const bookingsLeft = await one<{ n: string }>(
+      "SELECT count(*) AS n FROM bookings WHERE membership_id = $1",
+      [madeId],
+    );
+    const rowLeft = await one<{ n: string }>(
+      "SELECT count(*) AS n FROM memberships WHERE id = $1",
+      [madeId],
+    );
+    check(
+      voided.ok && bookingsLeft.n === "0" && rowLeft.n === "0",
+      "voiding an unkept promise removes it and its bookings",
+    );
+
+    const paid = await voidUnpaidMembership(client, usedUp);
+    check(
+      !paid.ok && paid.error.includes("εισπράχθηκαν"),
+      "voiding refuses a paid membership",
+    );
+  }
+
+  {
+    const u = await user("free");
+    await membership(u, await plan(null, 0), null, "2031-01-01", "2031-01-02");
+    const r = await book(u, await session(MON));
+    const made = await one<{ paid_on: string | null }>(
+      "SELECT paid_on FROM memberships WHERE id = $1",
+      [r.ok ? r.membershipId : "0"],
+    );
+    check(
+      r.ok && r.createdMembership && made.paid_on !== null,
+      "a zero-priced plan is created paid, never unpaid",
+    );
+  }
+
+  {
+    const u = await user("cancelled-class");
+    await unlimitedMarch(u);
+    const r = await book(u, await session(MON, 10, "cancelled"));
+    check(
+      !r.ok && r.error.includes("ακυρωθεί"),
+      "a cancelled class cannot be booked",
+    );
+  }
+} finally {
+  await client.query("ROLLBACK");
+  client.release();
+  await db().end();
+}
+
+console.log(`\n${passed} passed, ${failed.length} failed`);
+if (failed.length > 0) process.exit(1);

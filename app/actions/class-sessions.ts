@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { parseSessionId } from "@/lib/class-sessions";
-import { db, withTransaction } from "@/lib/db";
+import { db, hasPgCode, withTransaction } from "@/lib/db";
 import {
   addDays,
   isRealDate,
@@ -333,13 +333,23 @@ export async function deleteSession(
 
   const week = String(formData.get("week") ?? "");
 
-  // class_session_types cascades. Bookings do not exist yet; when they do,
-  // this needs a guard rather than destroying attendance history.
-  const { rowCount } = await db().query(
-    "DELETE FROM class_sessions WHERE id = $1",
-    [id],
-  );
-  if (rowCount === 0) return { error: "Άγνωστο μάθημα." };
+  // class_session_types cascades. Bookings do not: a class that has any
+  // cannot be deleted, because the bookings foreign key refuses - which is
+  // the point, since deleting it would take attendance history with it.
+  // Setting the class to cancelled keeps the class and its history.
+  const deleted = await db()
+    .query("DELETE FROM class_sessions WHERE id = $1", [id])
+    .catch((err: unknown) => {
+      if (hasPgCode(err, "23503")) return null;
+      throw err;
+    });
+  if (deleted === null) {
+    return {
+      error:
+        "Το μάθημα έχει κρατήσεις και δεν μπορεί να διαγραφεί. Άλλαξέ το σε ακυρωμένο.",
+    };
+  }
+  if (deleted.rowCount === 0) return { error: "Άγνωστο μάθημα." };
 
   revalidatePath("/schedule");
   redirect(week ? `/schedule?week=${week}` : "/schedule");

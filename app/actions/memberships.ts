@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { db } from "@/lib/db";
+import {
+  TRAINED_ON_UNPAID_MEMBERSHIP,
+  voidUnpaidMembership,
+} from "@/lib/bookings";
+import { db, hasPgCode, withTransaction } from "@/lib/db";
 import { isMembershipStatus, isPaymentMethod } from "@/lib/enums";
 import { isRealDate } from "@/lib/gym-time";
 import { parseMemberId } from "@/lib/members";
@@ -191,35 +195,23 @@ export async function deleteMembership(
   const id = parseMembershipId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστη συνδρομή." };
 
-  // A row with paid_on set is the only record that cash was taken, so
-  // deleting it destroys the record. That, and nothing about the dates, is
-  // what refuses: a prepaid month starting next week is as much a cash record
-  // as one that started today. An unpaid row records money that never
-  // arrived, so there is nothing to lose - a member who booked on a promise,
-  // never came and never paid leaves one, and staff need to void it. A paid
-  // row entered by mistake gets edited, or has its date cleared first, which
-  // is the right amount of friction for destroying a receipt.
-  //
-  // The guard is the DELETE's own WHERE, so nothing can change underneath it
-  // between deciding and deleting. Zero rows means unknown or refused, and
-  // only that path pays for a second query to say which.
-  const { rows } = await db().query<{ user_id: string }>(
-    "DELETE FROM memberships WHERE id = $1 AND paid_on IS NULL RETURNING user_id",
-    [id],
-  );
-  if (rows.length === 0) {
-    const { rowCount } = await db().query(
-      "SELECT 1 FROM memberships WHERE id = $1",
-      [id],
-    );
-    return {
-      error: rowCount
-        ? "Η συνδρομή καταγράφει χρήματα που εισπράχθηκαν. Κάνε την ανενεργή αντί να τη διαγράψεις."
-        : "Άγνωστη συνδρομή.",
-    };
-  }
+  // The rules - a paid membership is a receipt and stays, one the member
+  // trained on is a debt and stays, an unkept promise goes along with its
+  // bookings - live in voidUnpaidMembership, so the web and the app can only
+  // ever void a membership one way.
+  const result = await withTransaction((client) =>
+    voidUnpaidMembership(client, id),
+  ).catch((err: unknown) => {
+    // Only reachable when a check-in commits in the middle of the void; the
+    // function explains how the foreign key catches it.
+    if (hasPgCode(err, "23503")) {
+      return { ok: false as const, error: TRAINED_ON_UNPAID_MEMBERSHIP };
+    }
+    throw err;
+  });
+  if (!result.ok) return { error: result.error };
 
-  revalidatePath(`/members/${rows[0].user_id}`);
+  revalidatePath(`/members/${result.userId}`);
   revalidatePath("/memberships");
   redirect("/memberships");
 }
