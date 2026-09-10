@@ -1,0 +1,10 @@
+# Nixpacks auto-detects npm ci / next build / next start from package.json.
+# This file only pins Node (the migration script needs process.loadEnvFile)
+# and runs pending migrations before the server starts.
+
+[phases.setup]
+nixPkgs = ["nodejs_24"]
+
+[start]
+# ponytail: migrations at boot; move to a release step if this ever runs more than one instance
+cmd = "npm run migrate && npm start"
