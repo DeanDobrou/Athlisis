@@ -14,4 +14,11 @@
 -- applies to psql and the app alike. New connections pick it up: restart
 -- the app after applying.
 -- =====================================================================
-ALTER DATABASE crossfit_gym SET timezone = 'Europe/Athens';
+-- The name comes from current_database() because it differs by environment:
+-- crossfit_gym locally, postgres on Coolify. ALTER DATABASE won't take an
+-- expression for the name, hence the DO block.
+DO $$
+BEGIN
+  EXECUTE format('ALTER DATABASE %I SET timezone = %L', current_database(), 'Europe/Athens');
+END
+$$;
