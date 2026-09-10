@@ -2,6 +2,7 @@ import "server-only";
 
 import { db, greekFold, likeLiteral } from "@/lib/db";
 import type { Role } from "@/lib/session";
+import { parseId } from "@/lib/utils";
 
 export type MemberStatus = "active" | "inactive";
 
@@ -98,13 +99,8 @@ export async function listMembers(filter: MemberFilter): Promise<MemberPage> {
   };
 }
 
-export function parseMemberId(raw: string): number | null {
-  const id = Number(raw);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
-}
-
 export async function getMember(rawId: string): Promise<Member | null> {
-  const id = parseMemberId(rawId);
+  const id = parseId(rawId);
   if (id === null) return null;
 
   const { rows } = await db().query<Member>(

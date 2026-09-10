@@ -6,17 +6,32 @@ import { coversDate, periodEndsOn } from "@/lib/memberships";
 
 /**
  * The booking rules, in one place, so the web dashboard today and the mobile
- * API later can only ever book one way. Every function takes a client that is
+ * API later can only ever book one way. Every write takes a client that is
  * already inside a transaction: actions wrap it in withTransaction, and
  * scripts/check-bookings.mts wraps it in one that is rolled back.
  *
  * Locks are always taken member first, then class. Locking the member
  * serialises everything done to one member at a time - two bookings, a
- * booking and a cancellation, a void - which is what makes the per-member
- * rules (one class a day, the unpaid gate, visit counting) safe without
- * locking more. Taking them in a fixed order is what stops two transactions
- * deadlocking on each other.
+ * booking and a cancellation, a move, a void - which is what makes the
+ * per-member rules (one class a day, the unpaid gate, visit counting) safe
+ * without locking more. Taking them in a fixed order is what stops two
+ * transactions deadlocking on each other.
  */
+
+/**
+ * The statuses that hold a place in a class: anything but cancelled. A no-show
+ * held the place whether or not they came, and waitlisted is not written yet.
+ * One definition, for the capacity check and for every count a screen shows.
+ */
+export const HOLDS_A_PLACE = "('booked', 'checked_in', 'no_show')";
+
+/**
+ * Anything that can run a query: the pool, or a client inside a transaction.
+ * The week queries in lib/class-sessions.ts take one so
+ * scripts/check-bookings.mts can run them against rows it seeded in its
+ * rolled-back transaction, which the pool cannot see.
+ */
+export type Queryable = Pick<PoolClient, "query">;
 
 export const TRAINED_ON_UNPAID_MEMBERSHIP =
   "Το μέλος προπονήθηκε με αυτή τη συνδρομή, οπότε χρωστάει. Κατάγραψε την πληρωμή αντί να τη διαγράψεις.";
@@ -108,10 +123,13 @@ export async function bookMember(
   // ponytail: a full class is refused, not waitlisted. A waitlist needs
   // promotion, and promotion has to re-run every rule above for someone who
   // may have started owing money since they joined it. Add the two together.
+  //
+  // This count is its own statement, after the lock, on purpose: folded into
+  // the locking SELECT it could read a snapshot from before a concurrent
+  // booking committed, and oversell the class it was meant to protect.
   const { rows: taken } = await client.query<{ count: string }>(
     `SELECT count(*) FROM bookings
-     WHERE class_session_id = $1
-       AND status IN ('booked', 'checked_in', 'no_show')`,
+     WHERE class_session_id = $1 AND status IN ${HOLDS_A_PLACE}`,
     [sessionId],
   );
   if (Number(taken[0].count) >= capacity) {
@@ -229,6 +247,121 @@ export async function cancelBooking(
      WHERE id = $1 AND visits_remaining IS NOT NULL`,
     [cancelled[0].membership_id],
   );
+  return { ok: true };
+}
+
+export type MoveResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Moves a booking to another class by updating it in place: the same booking,
+ * the same membership and the same visit, on a different class. Nothing is
+ * refunded or spent, so this is not a cancel and a rebook - and a member who
+ * owes money can still be moved, because a move is not a new promise to pay.
+ *
+ * The destination still has to meet the rules a booking meets: the class is
+ * running and has a free place, and the member has no other class that day.
+ * The membership that paid must also cover the new day. When it does not, the
+ * move is refused rather than quietly charging a different membership, and
+ * staff cancel and book instead.
+ */
+export async function moveBooking(
+  client: PoolClient,
+  bookingId: number,
+  targetSessionId: number,
+): Promise<MoveResult> {
+  const { rows: found } = await client.query<{ user_id: string }>(
+    "SELECT user_id FROM bookings WHERE id = $1",
+    [bookingId],
+  );
+  if (found.length === 0) return { ok: false, error: "Άγνωστη κράτηση." };
+  const userId = found[0].user_id;
+  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
+
+  // Re-read under the member lock: it may have been cancelled or moved since.
+  const { rows: booking } = await client.query<{
+    status: string;
+    class_session_id: string;
+    membership_id: string;
+  }>(
+    `SELECT status, class_session_id, membership_id
+     FROM bookings WHERE id = $1 FOR UPDATE`,
+    [bookingId],
+  );
+  if (booking.length === 0) return { ok: false, error: "Άγνωστη κράτηση." };
+  const from = booking[0];
+  if (from.status !== "booked") {
+    return {
+      ok: false,
+      error: "Μετακινείται μόνο κράτηση που δεν έχει γίνει ακόμη.",
+    };
+  }
+  if (Number(from.class_session_id) === targetSessionId) return { ok: true };
+
+  const { rows: target } = await client.query<{
+    capacity: number;
+    status: string;
+    day: string;
+  }>(
+    `SELECT capacity, status, to_char(starts_at, 'YYYY-MM-DD') AS day
+     FROM class_sessions WHERE id = $1 FOR UPDATE`,
+    [targetSessionId],
+  );
+  if (target.length === 0) return { ok: false, error: "Άγνωστο μάθημα." };
+  if (target[0].status === "cancelled") {
+    return { ok: false, error: "Το μάθημα έχει ακυρωθεί." };
+  }
+  const { capacity, day } = target[0];
+
+  // One class a day, measured against every other booking the member holds.
+  // The one being moved does not count, which is what lets staff change the
+  // hour on the same day.
+  const { rowCount: sameDay } = await client.query(
+    `SELECT 1 FROM bookings b
+     JOIN class_sessions s ON s.id = b.class_session_id
+     WHERE b.user_id = $1 AND b.id <> $2 AND b.status <> 'cancelled'
+       AND s.starts_at::date = $3::date
+     LIMIT 1`,
+    [userId, bookingId, day],
+  );
+  if (sameDay) {
+    return { ok: false, error: "Το μέλος έχει ήδη κράτηση εκείνη την ημέρα." };
+  }
+
+  // Its own statement after the lock, for the same reason as in bookMember.
+  const { rows: taken } = await client.query<{ count: string }>(
+    `SELECT count(*) FROM bookings
+     WHERE class_session_id = $1 AND status IN ${HOLDS_A_PLACE}`,
+    [targetSessionId],
+  );
+  if (Number(taken[0].count) >= capacity) {
+    return { ok: false, error: "Το μάθημα είναι γεμάτο." };
+  }
+
+  const { rowCount: covered } = await client.query(
+    `SELECT 1 FROM memberships m WHERE m.id = $1 AND ${coversDate("$2::date")}`,
+    [from.membership_id, day],
+  );
+  if (!covered) {
+    return {
+      ok: false,
+      error:
+        "Η συνδρομή αυτής της κράτησης δεν καλύπτει εκείνη την ημέρα. Ακύρωσε και κάνε νέα κράτηση.",
+    };
+  }
+
+  // A booking is unique per member and class. A cancellation the member left
+  // on the destination would collide with the update, and it records nothing
+  // worth keeping once they are booked there again, so it goes first.
+  await client.query(
+    `DELETE FROM bookings
+     WHERE user_id = $1 AND class_session_id = $2 AND status = 'cancelled'`,
+    [userId, targetSessionId],
+  );
+  await client.query(
+    "UPDATE bookings SET class_session_id = $1 WHERE id = $2",
+    [targetSessionId, bookingId],
+  );
+
   return { ok: true };
 }
 

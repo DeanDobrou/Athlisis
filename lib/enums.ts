@@ -77,3 +77,11 @@ export const PAYMENT_METHODS: Record<PaymentMethod, string> = {
 export function isPaymentMethod(value: string): value is PaymentMethod {
   return Object.hasOwn(PAYMENT_METHODS, value);
 }
+
+export type BookingStatus =
+  | "booked"
+  | "waitlisted"
+  | "checked_in"
+  | "no_show"
+  | "cancelled";
+

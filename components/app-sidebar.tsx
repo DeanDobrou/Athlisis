@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  CalendarCheck,
   CalendarDays,
   CreditCard,
   Dumbbell,
@@ -43,6 +44,7 @@ const nav = [
     label: "Προπόνηση",
     items: [
       { title: "Πρόγραμμα", href: "/schedule", icon: CalendarDays },
+      { title: "Κρατήσεις", href: "/bookings", icon: CalendarCheck },
       { title: "WODs", href: "/wods", icon: Dumbbell },
     ],
   },

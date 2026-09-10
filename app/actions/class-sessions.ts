@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { parseSessionId } from "@/lib/class-sessions";
 import { db, hasPgCode, withTransaction } from "@/lib/db";
 import {
   addDays,
@@ -13,6 +12,7 @@ import {
 } from "@/lib/gym-time";
 import { nextFreeSlot, slotIndex } from "@/lib/slots";
 import { requireAdmin } from "@/lib/session";
+import { parseId } from "@/lib/utils";
 
 export type SessionFormState = { error: string } | undefined;
 
@@ -121,7 +121,7 @@ export async function updateSession(
 ): Promise<SessionFormState> {
   await requireAdmin();
 
-  const id = parseSessionId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστο μάθημα." };
 
   const f = parseFields(formData);
@@ -170,7 +170,7 @@ export async function copySession(
 ): Promise<CopySessionState> {
   await requireAdmin();
 
-  const id = parseSessionId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστο μάθημα." };
 
   const result = await withTransaction(async (client) => {
@@ -328,7 +328,7 @@ export async function deleteSession(
 ): Promise<DeleteSessionState> {
   await requireAdmin();
 
-  const id = parseSessionId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστο μάθημα." };
 
   const week = String(formData.get("week") ?? "");

@@ -67,7 +67,7 @@ export default async function SchedulePage({
           >
             <ChevronLeft />
           </Link>
-          <WeekPicker monday={monday} lastDay={friday} />
+          <WeekPicker monday={monday} lastDay={friday} basePath="/schedule" />
           <Link
             href={`/schedule?week=${addDays(monday, 7)}`}
             className={buttonVariants({ variant: "outline", size: "icon" })}
@@ -146,7 +146,7 @@ export default async function SchedulePage({
                               {s.start_time} - {s.end_time}
                             </p>
                             <p className="text-muted-foreground text-xs">
-                              {s.capacity} places
+                              {s.capacity} θέσεις
                             </p>
                           </div>
                           <div className="flex shrink-0 items-start gap-1">

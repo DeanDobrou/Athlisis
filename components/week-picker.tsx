@@ -44,10 +44,13 @@ function label(monday: string, lastDay: string): string {
 export function WeekPicker({
   monday,
   lastDay,
+  basePath,
 }: {
   monday: string;
   /** Friday: the last day the schedule shows, not the calendar week's end. */
   lastDay: string;
+  /** The page the chosen week opens on. Both week pages share this picker. */
+  basePath: "/schedule" | "/bookings";
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -76,7 +79,7 @@ export function WeekPicker({
             if (!picked) return;
             setOpen(false);
             startTransition(() =>
-              router.push(`/schedule?week=${weekStart(toISODate(picked))}`),
+              router.push(`${basePath}?week=${weekStart(toISODate(picked))}`),
             );
           }}
           // Monday-start weeks, matching weekStart() and Greek convention.

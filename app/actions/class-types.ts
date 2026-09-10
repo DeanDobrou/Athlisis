@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { parseClassTypeId } from "@/lib/class-types";
 import { db, hasPgCode } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
+import { parseId } from "@/lib/utils";
 
 export type ClassTypeFormState = { error: string } | undefined;
 
@@ -56,7 +56,7 @@ export async function updateClassType(
 ): Promise<ClassTypeFormState> {
   await requireAdmin();
 
-  const id = parseClassTypeId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστος τύπος μαθήματος." };
 
   const f = parseFields(formData);
@@ -80,7 +80,7 @@ export async function deleteClassType(
 ): Promise<DeleteClassTypeState> {
   await requireAdmin();
 
-  const id = parseClassTypeId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστος τύπος μαθήματος." };
 
   try {

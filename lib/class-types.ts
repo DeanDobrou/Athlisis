@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { parseId } from "@/lib/utils";
 
 /** A training modality, not a kind of class. A session can carry several. */
 export type ClassType = {
@@ -19,13 +20,8 @@ export async function listClassTypes(): Promise<ClassType[]> {
   return rows;
 }
 
-export function parseClassTypeId(raw: string): number | null {
-  const id = Number(raw);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
-}
-
 export async function getClassType(rawId: string): Promise<ClassType | null> {
-  const id = parseClassTypeId(rawId);
+  const id = parseId(rawId);
   if (id === null) return null;
 
   const { rows } = await db().query<ClassType>(

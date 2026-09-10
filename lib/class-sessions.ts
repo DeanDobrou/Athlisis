@@ -1,15 +1,19 @@
 import "server-only";
 
+import { HOLDS_A_PLACE, type Queryable } from "@/lib/bookings";
 import type { ClassType } from "@/lib/class-types";
 import { db } from "@/lib/db";
+import type { BookingStatus } from "@/lib/enums";
 import { TRAINING_DAYS } from "@/lib/gym-time";
+import { membershipState } from "@/lib/memberships";
+import { parseId } from "@/lib/utils";
 
 export type SessionStatus = "scheduled" | "cancelled";
 
 /**
  * ponytail: a constant, not a settings row. Every class holds the same number
- * and it is editable per session anyway. Move it into `settings` when bookings
- * arrive and that table exists for the unpaid allowance.
+ * and it is editable per session anyway. Move it into `settings` when that
+ * table lands with member self-booking.
  */
 export const DEFAULT_CAPACITY = 8;
 
@@ -80,15 +84,10 @@ export async function listSessionsForWeek(
   return rows;
 }
 
-export function parseSessionId(raw: string): number | null {
-  const id = Number(raw);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
-}
-
 export async function getSession(
   rawId: string,
 ): Promise<ClassSession | null> {
-  const id = parseSessionId(rawId);
+  const id = parseId(rawId);
   if (id === null) return null;
 
   const { rows } = await db().query<ClassSession>(
@@ -96,4 +95,44 @@ export async function getSession(
     [id],
   );
   return rows[0] ?? null;
+}
+
+export type WeekBooking = {
+  id: string;
+  session_id: string;
+  user_id: string;
+  member_name: string;
+  status: BookingStatus;
+  unpaid: boolean;
+};
+
+/**
+ * Every booking holding a place in the same Monday to Friday week as
+ * listSessionsForWeek, for the bookings board. Cancellations are left out: they
+ * hold no place, so there is nothing on the board to show or drag. Ordered by
+ * when the member booked, so names keep a stable order inside a class.
+ *
+ * unpaid is the paying membership reading as Unpaid through membershipState(),
+ * the same definition the memberships grid uses.
+ */
+export async function listWeekBookings(
+  weekStart: string,
+  runner: Queryable = db(),
+): Promise<WeekBooking[]> {
+  const { rows } = await runner.query<WeekBooking>(
+    `SELECT b.id, b.class_session_id AS session_id, b.user_id,
+            u.first_name || ' ' || u.last_name AS member_name,
+            b.status,
+            (${membershipState("m")}) = 'unpaid' AS unpaid
+     FROM bookings b
+     JOIN class_sessions s ON s.id = b.class_session_id
+     JOIN users u ON u.id = b.user_id
+     JOIN memberships m ON m.id = b.membership_id
+     WHERE s.starts_at >= $1::date
+       AND s.starts_at < $1::date + $2::int
+       AND b.status IN ${HOLDS_A_PLACE}
+     ORDER BY b.booked_at, b.id`,
+    [weekStart, TRAINING_DAYS],
+  );
+  return rows;
 }

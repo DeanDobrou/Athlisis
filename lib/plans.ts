@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import type { BillingInterval } from "@/lib/enums";
+import { parseId } from "@/lib/utils";
 
 export type Plan = {
   id: string;
@@ -22,13 +23,8 @@ export async function listPlans(): Promise<Plan[]> {
   return rows;
 }
 
-export function parsePlanId(raw: string): number | null {
-  const id = Number(raw);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
-}
-
 export async function getPlan(rawId: string): Promise<Plan | null> {
-  const id = parsePlanId(rawId);
+  const id = parseId(rawId);
   if (id === null) return null;
 
   const { rows } = await db().query<Plan>(

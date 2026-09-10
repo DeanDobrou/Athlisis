@@ -13,7 +13,9 @@ export default function AdminLayout({
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      {/* min-w-0 lets a wide page, like the bookings board, scroll inside its
+          own box instead of stretching the whole layout past the screen. */}
+      <SidebarInset className="min-w-0">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger />
         </header>

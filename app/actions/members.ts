@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db, hasPgCode } from "@/lib/db";
-import { parseMemberId } from "@/lib/members";
 import { countMemberships, hasCoverageToday } from "@/lib/memberships";
 import { generatePassword, hashPassword } from "@/lib/password";
 import { requireAdmin } from "@/lib/session";
+import { parseId } from "@/lib/utils";
 
 export type MemberFormState = { error: string } | undefined;
 
@@ -96,7 +96,7 @@ export async function updateMember(
 ): Promise<MemberFormState> {
   const admin = await requireAdmin();
 
-  const id = parseMemberId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστο μέλος." };
 
   const f = parseFields(formData);
@@ -159,7 +159,7 @@ export async function deleteMember(
 ): Promise<DeleteMemberState> {
   const admin = await requireAdmin();
 
-  const id = parseMemberId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστο μέλος." };
   if (id === admin.userId) {
     return { error: "Δεν μπορείς να διαγράψεις τον δικό σου λογαριασμό." };

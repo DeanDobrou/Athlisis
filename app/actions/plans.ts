@@ -6,8 +6,8 @@ import { redirect } from "next/navigation";
 import { db, hasPgCode } from "@/lib/db";
 import { isBillingInterval } from "@/lib/enums";
 import { parsePriceToCents } from "@/lib/money";
-import { parsePlanId } from "@/lib/plans";
 import { requireAdmin } from "@/lib/session";
+import { parseId } from "@/lib/utils";
 
 export type PlanFormState = { error: string } | undefined;
 
@@ -82,7 +82,7 @@ export async function updatePlan(
 ): Promise<PlanFormState> {
   await requireAdmin();
 
-  const id = parsePlanId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστο πακέτο." };
 
   const f = parseFields(formData);
@@ -109,7 +109,7 @@ export async function deletePlan(
 ): Promise<DeletePlanState> {
   await requireAdmin();
 
-  const id = parsePlanId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστο πακέτο." };
 
   try {

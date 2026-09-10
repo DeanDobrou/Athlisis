@@ -343,12 +343,16 @@ in or missed has already happened.
 
 ### How booking is enforced
 
-All of it lives in `lib/bookings.ts` - `bookMember`, `cancelBooking` and
-`voidUnpaidMembership` - so the web dashboard now and the mobile API later can
-only ever book one way. Each takes a client already inside a transaction:
-Server Actions wrap it in `withTransaction`, and `npm run check:bookings` wraps
-it in one it always rolls back, running every rule in this section against the
-real database.
+All of it lives in `lib/bookings.ts` - `bookMember`, `cancelBooking`,
+`moveBooking` and `voidUnpaidMembership` - so the web dashboard now and the
+mobile API later can only ever book one way. Each takes a client already inside
+a transaction: Server Actions wrap it in `withTransaction`, and
+`npm run check:bookings` wraps it in one it always rolls back, running every
+rule in this section against the real database. The read the board uses,
+`listWeekBookings` in `lib/class-sessions.ts`, takes an optional query runner
+for the same reason: the check passes its transaction so it reads rows it
+seeded, which the pool cannot see. That parameter is not dead, because removing
+it takes the bookings of the week out of the check.
 
 **Locks are taken member first, then class.** Locking the member row
 serialises everything done to one member - two bookings, a booking and a
@@ -373,6 +377,18 @@ member self-booking. Until then a staff cancellation always returns the visit.
 **A class with bookings cannot be deleted.** The bookings foreign key refuses,
 which is the point - deleting it would take attendance history with it - and
 the action says to set the class to cancelled instead.
+
+**A move updates the booking; it does not cancel and rebook.** `moveBooking`
+changes only which class the booking is on: the membership that paid and the
+visit it spent stay exactly as they were. That is why a member who owes money
+can still be moved - a move is not a new promise to pay, so the unpaid gate
+does not apply. The destination must still be running, have a free place, and
+leave the member one class that day, counting every booking except the one
+being moved, so changing the hour on the same day works. Two more rules follow
+from keeping the membership: it must cover the new day, or the move is refused
+and staff cancel and book instead; and a cancellation the member once left on
+the destination class is deleted first, since a booking is unique per member
+and class. Only a booking that has not happened yet moves.
 
 ### Booking with no coverage: the unpaid membership
 
@@ -517,23 +533,62 @@ QR codes.
 
 ### The two admin calendars
 
-`/schedule` is a **management** grid: build the week, create and edit and copy
-classes. It knows about sessions, not people.
+`/schedule` (Πρόγραμμα) is a **management** grid: build the week, create and
+edit and copy classes. It knows about sessions, not people.
 
-Check-in needs a second screen, a **day view**: pick a date, see that day's
-classes, open one and get the roster - who booked, in what order, waitlist
-included, with a check-in control and an `Unpaid` flag beside each name. This
-is the same calendar members see in the app, plus the attendance controls, and
-it is where staff will spend opening hours.
+`/bookings` (Κρατήσεις) is a **board**: rows are the gym's five fixed slots,
+columns are Monday to Friday, and each class shows its members right on it, so
+staff never open a class to see who is coming. A class is titled with its time
+and its places as plain text - `18:30-19:30 6/8` - with the count read through
+`HOLDS_A_PLACE`, the same rule that refuses a booking. A member who owes money
+carries a dot, which is `membershipState()` reading Unpaid, the same definition
+the memberships grid uses.
 
-**They stay two screens.** The week grid answers "what is the gym running this
-week"; the day view answers "who is standing in front of me". Different people,
-different times of day. Merging them produces a page cluttered for both jobs.
+**Moving a member is a drag.** Dropping a member on another class updates that
+booking in place through `moveBooking`: same booking, same membership, same
+visit. It shows at once and settles when the server answers; a refusal puts the
+member back with the reason. While dragging, a class that would refuse dims and
+says why before the drop. An Undo follows every move.
 
-Staff also need to book a member onto a class from that day view, since not
-every member will use the app, and a booking made by staff resolves entitlement
-through exactly the same path as one made from the phone - including creating
-an unpaid membership when there is no coverage.
+**Tapping a member cancels.** A tap asks to confirm, naming the member and the
+class, then cancels that booking and returns its visit. The confirmation is
+also the guard against a tap that was meant to be a drag. Moving is only ever a
+drag: there is deliberately no second way to move from a list. A checked-in
+member is not tappable.
+
+**The `+` in a class opens a sheet** - from the right on a computer, from the
+bottom on a phone - with a searchable member list. A booking made there
+resolves entitlement through exactly the same path as one made from the phone,
+including creating an unpaid membership when there is no coverage.
+
+**Why a member is a plain button, not a menu.** The app's menus are Base UI,
+which opens a menu on mouse-down. A member that was both draggable and a menu
+trigger would pop its menu open the moment a drag started. A plain button's
+click only fires when no drag happened. On touch screens a drag starts after a
+short press, so a quick tap asks to cancel and a swipe still scrolls.
+
+**Moving needs a pointer.** With moving drag-only, a keyboard alone cannot move
+a member. If that ever matters, dnd-kit's keyboard sensor can pick a member up
+with the space bar; it would need cell-to-cell steps added, since by default it
+moves by pixels.
+
+**Drag and drop is `@dnd-kit/core`**, chosen for its built-in touch and pointer
+dragging. Calendar libraries such as FullCalendar and Schedule-X were rejected
+for this: their dragging moves whole classes through time, and they have no
+concept of members inside a class to drag between classes.
+
+**They stay two screens.** The schedule answers "what is the gym running this
+week"; Κρατήσεις answers "who is coming". Merging them would put edit, copy,
+delete and booking on every class.
+
+**Not the shadcn Calendar.** That component is a date picker - a month of day
+numbers to click - with no hours and no events inside a day, so it cannot draw a
+week of classes. It is used where it fits: the week picker opens it to jump to a
+week.
+
+Deliberately left out: a view organised by member, searching the board for one
+member across the week, moving several members at once, and moving from a list
+instead of by dragging.
 
 ### Visit pacing: one hard rule, one soft one
 
@@ -731,6 +786,10 @@ members screen ships.
 | `lib/db.ts` | single pool, `withTransaction`, `greekFold()` | done |
 | `lib/bookings.ts` | booking rules: book, cancel, void an unpaid membership (§8) | done |
 | `scripts/check-bookings.mts` | `npm run check:bookings`: every booking rule against the real database, rolled back | done |
+| `app/(admin)/bookings/page.tsx` | Κρατήσεις: loads the week and renders the board | done |
+| `components/booking-board.tsx` | the board: drag to move, tap to cancel, `+` to add, Undo | done |
+| `app/actions/bookings.ts` | book, cancel and move, called directly by the board | done |
+| `components/week-picker.tsx` | week jumper shared by both week pages (`basePath`) | done |
 | `scripts/migrate.mjs` | migration runner (`--dry-run`) | done |
 | `app/api/health/route.ts` | connectivity smoke test | done |
 | `app/page.tsx` | redirects to `/dashboard` | done |
@@ -739,7 +798,7 @@ members screen ships.
 | `lib/rate-limit.ts` | in-memory login throttle | done |
 | `proxy.ts` | optimistic route guard (Next 16 renamed `middleware`) | done |
 | `app/actions/auth.ts` | `login` / `logout` Server Actions | done |
-| `lib/members.ts` | member queries, id validation | done |
+| `lib/members.ts` | member queries | done |
 | `app/actions/members.ts` | create / update / delete, with delete guards | done |
 | `app/(admin)/members/*` | list, view, create, update | done |
 | `components/member-form.tsx` | shared create/update form | done |
@@ -751,7 +810,7 @@ members screen ships.
 | `app/(admin)/dashboard/page.tsx` | calls `requireAdmin()`; otherwise a stub | stub |
 | `components/app-sidebar.tsx` | nav + sign out; links to unbuilt routes | done |
 | `components/ui/*` | shadcn/ui primitives | done |
-| `lib/utils.ts` | `cn()` class helper | done |
+| `lib/utils.ts` | `cn()` class helper, and `parseId()` for every id taken from a URL or form | done |
 | `db/migrations.ts` | mobile SQLite migrations + runner | not written |
 
 **Why the auth check is not in `app/(admin)/layout.tsx`.** Layouts do not
@@ -791,15 +850,15 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
    and update forms. Outstanding: the welcome email, which is blocked on the
    transport decision in §10. Bookings need members to exist, so this comes
    before the schedule.
-5. **In progress** - **Bookings.** Done: the week schedule with "copy last
-   week", and the booking service in `lib/bookings.ts` - capacity, entitlement
-   resolution, the unpaid membership, one class a day, cancellation and
-   voiding, checked by `npm run check:bookings`. Next: the admin **day view** -
-   a date, its classes, each class's roster - which is where staff book members
-   on, since nothing else can create a booking until the mobile app exists.
-   Deferred: waitlists and `settings` (§8)
-6. Check-in - a control on the day view's roster, with the `Unpaid` flag staff
-   collect against. Small once step 5 exists. Member self-check-in deferred
+5. **Done** - **Bookings.** The week schedule with "copy last week"; the booking
+   service in `lib/bookings.ts` - capacity, entitlement resolution, the unpaid
+   membership, one class a day, cancellation, moving and voiding - checked by
+   `npm run check:bookings`; and the **Κρατήσεις** board, where staff drag
+   members between classes and tap to cancel or add. Deferred: waitlists and
+   `settings` (§8)
+6. Check-in - on the board, beside the Unpaid dot staff collect against. With a
+   tap on a member now meaning cancel, how staff check a member in is still to
+   decide. Member self-check-in deferred
 7. WODs - program, publish, show on the schedule
 
 **Then:** mobile app (Expo) → pull sync → scores + leaderboard (brings push sync with them) → push notifications → benchmarks.

@@ -8,6 +8,7 @@ import {
   type MembershipStatus,
   type PaymentMethod,
 } from "@/lib/enums";
+import { parseId } from "@/lib/utils";
 
 export type Membership = {
   id: string;
@@ -127,13 +128,8 @@ export async function listMembershipsForMember(
   return rows;
 }
 
-export function parseMembershipId(raw: string): number | null {
-  const id = Number(raw);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
-}
-
 export async function getMembership(rawId: string): Promise<Membership | null> {
-  const id = parseMembershipId(rawId);
+  const id = parseId(rawId);
   if (id === null) return null;
 
   const { rows } = await db().query<Membership>(

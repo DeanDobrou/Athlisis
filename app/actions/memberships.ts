@@ -10,11 +10,10 @@ import {
 import { db, hasPgCode, withTransaction } from "@/lib/db";
 import { isMembershipStatus, isPaymentMethod } from "@/lib/enums";
 import { isRealDate } from "@/lib/gym-time";
-import { parseMemberId } from "@/lib/members";
-import { parseMembershipId, periodEndsOn } from "@/lib/memberships";
+import { periodEndsOn } from "@/lib/memberships";
 import { parsePriceToCents } from "@/lib/money";
-import { parsePlanId } from "@/lib/plans";
 import { requireAdmin } from "@/lib/session";
+import { parseId } from "@/lib/utils";
 
 export type MembershipFormState = { error: string } | undefined;
 
@@ -31,10 +30,10 @@ type ParsedMembership = {
 function parseFields(formData: FormData): ParsedMembership | { error: string } {
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
-  const userId = parseMemberId(get("user_id"));
+  const userId = parseId(get("user_id"));
   if (userId === null) return { error: "Διάλεξε μέλος." };
 
-  const planId = parsePlanId(get("plan_id"));
+  const planId = parseId(get("plan_id"));
   if (planId === null) return { error: "Διάλεξε πακέτο." };
 
   const status = get("status");
@@ -125,7 +124,7 @@ export async function updateMembership(
 ): Promise<MembershipFormState> {
   const admin = await requireAdmin();
 
-  const id = parseMembershipId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστη συνδρομή." };
 
   const f = parseFields(formData);
@@ -192,7 +191,7 @@ export async function deleteMembership(
 ): Promise<DeleteMembershipState> {
   await requireAdmin();
 
-  const id = parseMembershipId(String(formData.get("id") ?? ""));
+  const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστη συνδρομή." };
 
   // The rules - a paid membership is a receipt and stays, one the member

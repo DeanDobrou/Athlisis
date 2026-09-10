@@ -297,6 +297,139 @@ try {
       "a cancelled class cannot be booked",
     );
   }
+  {
+    const { moveBooking } = await import("@/lib/bookings");
+    const row = (id: number) =>
+      one<{ session: string; status: string }>(
+        "SELECT class_session_id AS session, status FROM bookings WHERE id = $1",
+        [id],
+      );
+    const bookingIdOf = (r: Awaited<ReturnType<typeof book>>) =>
+      r.ok ? Number(r.bookingId) : 0;
+
+    // An ordinary move: the same row, a new class, the visit untouched.
+    const mover = await user("move-pack");
+    const moverPack = await membership(mover, await plan(5, 3000), 5);
+    const moved = bookingIdOf(await book(mover, await session(WED)));
+    const visitsBefore = await visitsOf(moverPack);
+    const toThu = await session(THU);
+    const first = await moveBooking(client, moved, toThu);
+    const afterFirst = await row(moved);
+    check(
+      first.ok && Number(afterFirst.session) === toThu && afterFirst.status === "booked",
+      "a move updates the same booking onto the new class",
+    );
+    check(
+      (await visitsOf(moverPack)) === visitsBefore,
+      "a move neither refunds nor spends a visit",
+    );
+
+    // The moved booking does not count against one class a day.
+    const laterThu = await session(THU);
+    const hour = await moveBooking(client, moved, laterThu);
+    check(hour.ok, "changing the hour on the same day is allowed");
+    const noop = await moveBooking(client, moved, laterThu);
+    check(
+      noop.ok && Number((await row(moved)).session) === laterThu,
+      "dropping onto the class it is already in changes nothing",
+    );
+
+    const full = await session(FRI, 1);
+    const occupant = await user("move-occupant");
+    await unlimitedMarch(occupant);
+    await book(occupant, full);
+    const intoFull = await moveBooking(client, moved, full);
+    check(
+      !intoFull.ok && intoFull.error.includes("γεμάτο"),
+      "moving onto a full class is refused",
+    );
+
+    await book(mover, await session(FRI));
+    const clash = await moveBooking(client, moved, await session(FRI));
+    check(
+      !clash.ok && clash.error.includes("εκείνη την ημέρα"),
+      "moving onto a day the member already has a class is refused",
+    );
+
+    const intoCancelled = await moveBooking(
+      client,
+      moved,
+      await session(MON, 10, "cancelled"),
+    );
+    check(
+      !intoCancelled.ok && intoCancelled.error.includes("ακυρωθεί"),
+      "moving onto a cancelled class is refused",
+    );
+
+    // A member who owes can still be moved: a move is not a new promise.
+    const owing = await user("move-owing");
+    await membership(owing, await plan(12, 6000), 0);
+    const onPromise = bookingIdOf(await book(owing, await session(MON)));
+    const owingMove = await moveBooking(client, onPromise, await session(TUE));
+    check(owingMove.ok, "a member who owes money can still be moved");
+
+    // The membership that paid has to cover the new day.
+    const monthly = await user("move-monthly");
+    await unlimitedMarch(monthly);
+    const inMarch = bookingIdOf(await book(monthly, await session(MON)));
+    const pastIt = await moveBooking(client, inMarch, await session("2031-04-07"));
+    check(
+      !pastIt.ok && pastIt.error.includes("δεν καλύπτει"),
+      "a move outside the paying membership's cover is refused",
+    );
+
+    // A cancellation left on the destination does not block the move.
+    const returner = await user("move-returner");
+    await unlimitedMarch(returner);
+    const classA = await session(MON);
+    const leftA = bookingIdOf(await book(returner, classA));
+    await cancelBooking(client, leftA);
+    const onB = bookingIdOf(await book(returner, await session(TUE)));
+    const backToA = await moveBooking(client, onB, classA);
+    const rowsOnA = await one<{ n: string }>(
+      "SELECT count(*) AS n FROM bookings WHERE user_id = $1 AND class_session_id = $2",
+      [returner, classA],
+    );
+    check(
+      backToA.ok && rowsOnA.n === "1" && Number((await row(onB)).session) === classA,
+      "an old cancellation on the destination does not block the move",
+    );
+
+    await client.query("UPDATE bookings SET status = 'checked_in' WHERE id = $1", [inMarch]);
+    const attended = await moveBooking(client, inMarch, await session(TUE));
+    check(!attended.ok, "a checked-in booking cannot be moved");
+  }
+  {
+    const { listWeekBookings } = await import("@/lib/class-sessions");
+    const paying = await user("week-paying");
+    await unlimitedMarch(paying);
+    const owing = await user("week-owing");
+    await membership(owing, await plan(12, 6000), 0);
+    const leaver = await user("week-leaver");
+    await unlimitedMarch(leaver);
+
+    const inWeek = await session(WED);
+    await book(paying, inWeek);
+    await book(owing, inWeek);
+    await book(paying, await session("2031-03-10"));
+    const left = await book(leaver, await session(THU));
+    if (left.ok) await cancelBooking(client, Number(left.bookingId));
+
+    const week = await listWeekBookings(MON, client);
+    const mine = week.filter((w) =>
+      [paying, owing, leaver].includes(Number(w.user_id)),
+    );
+    check(
+      mine.length === 2 && mine.every((w) => Number(w.session_id) === inWeek),
+      "the week's bookings leave out cancellations and other weeks",
+    );
+    const flag = (u: number) =>
+      mine.find((w) => Number(w.user_id) === u)?.unpaid;
+    check(
+      flag(owing) === true && flag(paying) === false,
+      "and flag who is booked on an unpaid membership",
+    );
+  }
 } finally {
   await client.query("ROLLBACK");
   client.release();
