@@ -1,9 +1,9 @@
 # Nixpacks auto-detects npm ci / next build / next start from package.json.
-# This file only pins Node (the migration script needs process.loadEnvFile)
+# This file only pins Node 22 (the Coolify nixpacks image predates nodejs_24)
 # and runs pending migrations before the server starts.
 
 [phases.setup]
-nixPkgs = ["nodejs_24"]
+nixPkgs = ["nodejs_22"]
 
 [start]
 # ponytail: migrations at boot; move to a release step if this ever runs more than one instance
