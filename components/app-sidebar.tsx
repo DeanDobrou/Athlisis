@@ -69,10 +69,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="px-4 py-4 font-heading text-xl font-semibold tracking-wide">
+      <SidebarHeader className="px-4 py-4 text-xl font-semibold tracking-wide">
         Athlisis
       </SidebarHeader>
-      <SidebarContent className="font-heading">
+      <SidebarContent>
         {nav.map((group) => (
           <SidebarGroup key={group.label || "overview"}>
             {group.label && (
@@ -103,7 +103,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="font-heading">
+      <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
             <form action={logout}>

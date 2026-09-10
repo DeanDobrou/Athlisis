@@ -1,14 +1,9 @@
 import type { Metadata } from "next";
-import { Inter, Roboto_Condensed } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
   variable: "--font-inter",
-  subsets: ["latin", "greek"],
-});
-
-const robotoCondensed = Roboto_Condensed({
-  variable: "--font-roboto-condensed",
   subsets: ["latin", "greek"],
 });
 
@@ -23,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="el" className={`${inter.variable} ${robotoCondensed.variable} h-full antialiased`}>
+    <html lang="el" className={`${inter.variable} h-full antialiased`}>
       {/* suppressHydrationWarning - extensions inject body attrs (cz-shortcut-listen) */}
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
