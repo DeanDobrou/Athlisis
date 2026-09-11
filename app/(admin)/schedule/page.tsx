@@ -25,6 +25,7 @@ import {
   weekStart,
 } from "@/lib/gym-time";
 import { requireAdmin } from "@/lib/session";
+import { DEFAULT_SLOT, nextFreeSlot, slotIndex } from "@/lib/slots";
 import { cn } from "@/lib/utils";
 
 export default async function SchedulePage({
@@ -91,6 +92,13 @@ export default async function SchedulePage({
         {days.map((day) => {
           const dayed = byDay.get(day) ?? [];
           const isToday = day === today;
+          // Adding stays on offer until every slot of the day has a class, and
+          // opens the form on a free one: the evening default if it is free,
+          // else the next after it, the way copying picks.
+          const freeSlot = nextFreeSlot(
+            new Set(dayed.map((s) => s.start_time)),
+            slotIndex(DEFAULT_SLOT.start) - 1,
+          );
           return (
             <Card
               key={day}
@@ -116,20 +124,11 @@ export default async function SchedulePage({
                 )}
               </CardHeader>
 
-              <CardContent>
+              <CardContent className="space-y-2">
                 {dayed.length === 0 ? (
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground text-xs font-medium">
-                      Χωρίς μαθήματα
-                    </p>
-                    <Link
-                      href={`/schedule/create?day=${day}`}
-                      className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
-                    >
-                      <Plus className="size-3" />
-                      Προσθήκη μαθήματος
-                    </Link>
-                  </div>
+                  <p className="text-muted-foreground text-xs font-medium">
+                    Χωρίς μαθήματα
+                  </p>
                 ) : (
                   <ul className="space-y-2">
                     {dayed.map((s) => (
@@ -203,6 +202,15 @@ export default async function SchedulePage({
                       </li>
                     ))}
                   </ul>
+                )}
+                {freeSlot && (
+                  <Link
+                    href={`/schedule/create?day=${day}&start=${freeSlot.start}`}
+                    className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+                  >
+                    <Plus className="size-3" />
+                    Προσθήκη μαθήματος
+                  </Link>
                 )}
               </CardContent>
             </Card>

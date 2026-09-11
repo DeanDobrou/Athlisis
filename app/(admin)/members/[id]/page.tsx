@@ -129,7 +129,7 @@ export default async function MemberPage({
         )}
       </section>
 
-      <Link href="/members" className={buttonVariants({ variant: "ghost" })}>
+      <Link href="/members" className={buttonVariants({ variant: "outline" })}>
         Πίσω στα μέλη
       </Link>
     </div>

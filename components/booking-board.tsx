@@ -239,10 +239,9 @@ export function BookingBoard({
           <div
             className="grid gap-2"
             style={{
-              gridTemplateColumns: `3.5rem repeat(${days.length}, minmax(10rem, 1fr))`,
+              gridTemplateColumns: `repeat(${days.length}, minmax(10rem, 1fr))`,
             }}
           >
-            <div />
             {days.map((day) => (
               <div
                 key={day}
@@ -260,9 +259,6 @@ export function BookingBoard({
 
             {SLOTS.map((slot) => (
               <Fragment key={slot.start}>
-                <div className="text-muted-foreground pt-2 text-xs tabular-nums">
-                  {slot.start}
-                </div>
                 {days.map((day) => {
                   const cls = classes.find(
                     (c) => c.day === day && c.start_time === slot.start,

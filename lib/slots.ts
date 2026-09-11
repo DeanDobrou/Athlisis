@@ -84,6 +84,19 @@ if ((import.meta as { main?: boolean }).main) {
       null,
     "a full day has nowhere to copy to",
   );
+  // The schedule's add link searches from the evening default.
+  const fromDefault = slotIndex(DEFAULT_SLOT.start) - 1;
+  check(nextFreeSlot(taken(), fromDefault)?.start === "17:30", "add opens on the default");
+  check(
+    nextFreeSlot(taken("17:30", "18:30"), fromDefault)?.start === "19:30",
+    "add skips taken evening slots",
+  );
+  check(
+    nextFreeSlot(taken("17:30", "18:30", "19:30", "20:30"), fromDefault)
+      ?.start === "10:00",
+    "add falls back to the morning last",
+  );
+
   check(
     nextFreeSlot(taken(), -1)?.start === "10:00",
     "no current slot starts from the top",

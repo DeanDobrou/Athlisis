@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import type { ClassSession } from "@/lib/class-sessions";
 import type { ClassType } from "@/lib/class-types";
-import { DEFAULT_SLOT, findSlot, SLOTS } from "@/lib/slots";
+import { DEFAULT_SLOT, findSlot, SLOTS, type Slot } from "@/lib/slots";
 
 export function SessionForm({
   action,
@@ -22,6 +22,7 @@ export function SessionForm({
   session,
   defaultDay,
   defaultCapacity,
+  defaultSlot = DEFAULT_SLOT,
   submitLabel,
 }: {
   action: (
@@ -35,6 +36,8 @@ export function SessionForm({
   // module, and when it becomes a settings row the server will read it and
   // this component will not change.
   defaultCapacity: number;
+  /** Where a new class starts; the schedule passes the day's first free slot. */
+  defaultSlot?: Slot;
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
@@ -43,10 +46,8 @@ export function SessionForm({
   // everyday path; the inputs below stay as the escape hatch, so if the gym
   // moves to 17:00-18:00 the schedule keeps working until the new slot list
   // is deployed.
-  const [start, setStart] = useState(
-    session?.start_time ?? DEFAULT_SLOT.start,
-  );
-  const [end, setEnd] = useState(session?.end_time ?? DEFAULT_SLOT.end);
+  const [start, setStart] = useState(session?.start_time ?? defaultSlot.start);
+  const [end, setEnd] = useState(session?.end_time ?? defaultSlot.end);
 
   const selected = new Set(session?.types.map((t) => t.id) ?? []);
   const backHref = `/schedule?week=${session?.day ?? defaultDay}`;
