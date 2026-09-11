@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import type { SessionFormState } from "@/app/actions/class-sessions";
+import { ActionForm, FormField } from "@/components/action-form";
 import { DateField } from "@/components/date-field";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +15,6 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ClassSession } from "@/lib/class-sessions";
 import type { ClassType } from "@/lib/class-types";
 import { DEFAULT_SLOT, findSlot, SLOTS } from "@/lib/slots";
-
 
 export function SessionForm({
   action,
@@ -52,7 +52,11 @@ export function SessionForm({
   const backHref = `/schedule?week=${session?.day ?? defaultDay}`;
 
   return (
-    <form action={formAction} className="max-w-xl space-y-4">
+    <ActionForm
+      state={state}
+      action={formAction}
+      className="max-w-xl space-y-4"
+    >
       {session && <input type="hidden" name="id" value={session.id} />}
 
       <DateField
@@ -95,7 +99,7 @@ export function SessionForm({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="grid gap-2">
+        <FormField name="start_time">
           <Label htmlFor="start_time">Έναρξη</Label>
           <Input
             id="start_time"
@@ -105,8 +109,8 @@ export function SessionForm({
             onChange={(e) => setStart(e.target.value)}
             required
           />
-        </div>
-        <div className="grid gap-2">
+        </FormField>
+        <FormField name="end_time">
           <Label htmlFor="end_time">Λήξη</Label>
           <Input
             id="end_time"
@@ -116,8 +120,8 @@ export function SessionForm({
             onChange={(e) => setEnd(e.target.value)}
             required
           />
-        </div>
-        <div className="grid gap-2">
+        </FormField>
+        <FormField name="capacity">
           <Label htmlFor="capacity">Χωρητικότητα</Label>
           <Input
             id="capacity"
@@ -126,10 +130,10 @@ export function SessionForm({
             defaultValue={session?.capacity ?? defaultCapacity}
             required
           />
-        </div>
+        </FormField>
       </div>
 
-      <div className="grid gap-2">
+      <FormField name="class_type_ids">
         <span className="text-sm font-medium">Τύποι μαθημάτων</span>
         <div className="grid gap-3 sm:grid-cols-2">
           {classTypes.map((t) => (
@@ -157,7 +161,7 @@ export function SessionForm({
           Pick more than one where the class covers both, such as Lower
           strength and Metcon.
         </p>
-      </div>
+      </FormField>
 
       <div className="grid gap-2">
         <span className="text-sm font-medium">Κατάσταση</span>
@@ -188,12 +192,6 @@ export function SessionForm({
         />
       </div>
 
-      {state?.error && (
-        <p role="alert" className="text-destructive text-sm">
-          {state.error}
-        </p>
-      )}
-
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
           {pending ? "Αποθήκευση..." : submitLabel}
@@ -202,6 +200,6 @@ export function SessionForm({
           Άκυρο
         </Link>
       </div>
-    </form>
+    </ActionForm>
   );
 }

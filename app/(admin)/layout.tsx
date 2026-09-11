@@ -1,4 +1,5 @@
 import { AppSidebar } from "@/components/app-sidebar";
+import { Toaster } from "@/components/toaster";
 import {
   SidebarInset,
   SidebarProvider,
@@ -21,6 +22,7 @@ export default function AdminLayout({
         </header>
         <main className="flex-1 p-6">{children}</main>
       </SidebarInset>
+      <Toaster />
     </SidebarProvider>
   );
 }

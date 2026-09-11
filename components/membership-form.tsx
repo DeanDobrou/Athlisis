@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import type { MembershipFormState } from "@/app/actions/memberships";
+import { ActionForm, FormField } from "@/components/action-form";
 import { DateField } from "@/components/date-field";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,10 +60,14 @@ export function MembershipForm({
   const planItems = Object.fromEntries(plans.map((p) => [p.id, p.name]));
 
   return (
-    <form action={formAction} className="max-w-xl space-y-4">
+    <ActionForm
+      state={state}
+      action={formAction}
+      className="max-w-xl space-y-4"
+    >
       {membership && <input type="hidden" name="id" value={membership.id} />}
 
-      <div className="grid gap-2">
+      <FormField name="user_id">
         <Label htmlFor="user_id">Μέλος</Label>
         <Select
           name="user_id"
@@ -80,9 +85,9 @@ export function MembershipForm({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FormField>
 
-      <div className="grid gap-2">
+      <FormField name="plan_id">
         <Label htmlFor="plan_id">Πακέτο</Label>
         <Select
           name="plan_id"
@@ -106,10 +111,10 @@ export function MembershipForm({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FormField>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
+        <FormField name="amount">
           <Label htmlFor="amount">Τιμή (EUR)</Label>
           <Input
             id="amount"
@@ -119,7 +124,7 @@ export function MembershipForm({
             onChange={(e) => setAmount(e.target.value)}
             required
           />
-        </div>
+        </FormField>
         <DateField
           name="paid_on"
           label="Πληρώθηκε"
@@ -138,7 +143,7 @@ export function MembershipForm({
         καταγραφούν.
       </p>
 
-      <div className="grid gap-2">
+      <FormField name="method">
         <span className="text-sm font-medium">Τρόπος πληρωμής</span>
         <RadioGroup
           name="method"
@@ -156,7 +161,7 @@ export function MembershipForm({
             </Label>
           ))}
         </RadioGroup>
-      </div>
+      </FormField>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <DateField
@@ -164,7 +169,7 @@ export function MembershipForm({
           label="Έναρξη"
           defaultValue={membership?.starts_on ?? todayInGym()}
         />
-        <div className="grid gap-2">
+        <FormField name="status">
           <span className="text-sm font-medium">Κατάσταση</span>
           <RadioGroup
             name="status"
@@ -182,11 +187,11 @@ export function MembershipForm({
               </Label>
             ))}
           </RadioGroup>
-        </div>
+        </FormField>
       </div>
 
       {membership && (
-        <div className="grid gap-2">
+        <FormField name="visits_remaining">
           <Label htmlFor="visits_remaining">Υπόλοιπο επισκέψεων</Label>
           <Input
             id="visits_remaining"
@@ -195,7 +200,7 @@ export function MembershipForm({
             defaultValue={membership.visits_remaining ?? ""}
             placeholder="Κενό για απεριόριστες"
           />
-        </div>
+        </FormField>
       )}
 
       <p className="text-muted-foreground text-xs">
@@ -205,12 +210,6 @@ export function MembershipForm({
         Προγραμματισμένη όταν η περίοδος έχει περάσει ή δεν έχει αρχίσει -
         εδώ ορίζεις μόνο Ενεργή και Ανενεργή.
       </p>
-
-      {state?.error && (
-        <p role="alert" className="text-destructive text-sm">
-          {state.error}
-        </p>
-      )}
 
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
@@ -223,6 +222,6 @@ export function MembershipForm({
           Άκυρο
         </Link>
       </div>
-    </form>
+    </ActionForm>
   );
 }

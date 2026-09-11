@@ -1,7 +1,8 @@
 import { Pencil } from "lucide-react";
 import Link from "next/link";
 
-import { DeletePlanButton } from "@/components/delete-plan-button";
+import { deletePlan } from "@/app/actions/plans";
+import { DeleteButton } from "@/components/delete-button";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
@@ -69,7 +70,11 @@ export default async function PlansPage() {
                       >
                         <Pencil />
                       </Link>
-                      <DeletePlanButton planId={p.id} planName={p.name} iconOnly />
+                      <DeleteButton
+                        action={deletePlan.bind(null, p.id)}
+                        label={p.name}
+                        iconOnly
+                      />
                     </div>
                   </TableCell>
                 </TableRow>

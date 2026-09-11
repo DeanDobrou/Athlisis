@@ -14,7 +14,7 @@ import { nextFreeSlot, slotIndex } from "@/lib/slots";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
-export type SessionFormState = { error: string } | undefined;
+export type SessionFormState = { error: string; field?: string } | undefined;
 
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -28,15 +28,17 @@ type ParsedSession = {
   typeIds: number[];
 };
 
-function parseFields(formData: FormData): ParsedSession | { error: string } {
+function parseFields(
+  formData: FormData,
+): ParsedSession | { error: string; field: string } {
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
   const day = get("day");
-  if (!isRealDate(day)) return { error: "Διάλεξε ημερομηνία." };
+  if (!isRealDate(day)) return { field: "day", error: "Διάλεξε ημερομηνία." };
   // The calendar already greys these out, but a server action is its own
   // entry point and cannot rely on the form having done it.
   if (isWeekend(day)) {
-    return { error: "Το γυμναστήριο δεν έχει μαθήματα το Σαββατοκύριακο." };
+    return { field: "day", error: "Το γυμναστήριο δεν έχει μαθήματα το Σαββατοκύριακο." };
   }
 
   // Any real time is accepted, not only one of SLOTS. The slot buttons are the
@@ -44,17 +46,20 @@ function parseFields(formData: FormData): ParsedSession | { error: string } {
   // usable until a new slot list ships.
   const startTime = get("start_time");
   const endTime = get("end_time");
-  if (!HH_MM.test(startTime) || !HH_MM.test(endTime)) {
-    return { error: "Δώσε τις ώρες σε μορφή HH:MM." };
+  if (!HH_MM.test(startTime)) {
+    return { field: "start_time", error: "Δώσε την ώρα σε μορφή HH:MM." };
+  }
+  if (!HH_MM.test(endTime)) {
+    return { field: "end_time", error: "Δώσε την ώρα σε μορφή HH:MM." };
   }
   // String comparison is safe: both are zero-padded 24-hour times.
   if (endTime <= startTime) {
-    return { error: "Το μάθημα πρέπει να τελειώνει μετά την έναρξή του." };
+    return { field: "end_time", error: "Το μάθημα πρέπει να τελειώνει μετά την έναρξή του." };
   }
 
   const capacity = Number(get("capacity"));
   if (!Number.isSafeInteger(capacity) || capacity < 1) {
-    return { error: "Η χωρητικότητα πρέπει να είναι ακέραιος μεγαλύτερος του μηδενός." };
+    return { field: "capacity", error: "Η χωρητικότητα πρέπει να είναι ακέραιος μεγαλύτερος του μηδενός." };
   }
 
   const status = get("status") === "cancelled" ? "cancelled" : "scheduled";
@@ -64,7 +69,7 @@ function parseFields(formData: FormData): ParsedSession | { error: string } {
     .map((v) => Number(String(v)))
     .filter((n) => Number.isSafeInteger(n) && n > 0);
   if (typeIds.length === 0) {
-    return { error: "Διάλεξε τουλάχιστον έναν τύπο μαθήματος." };
+    return { field: "class_type_ids", error: "Διάλεξε τουλάχιστον έναν τύπο μαθήματος." };
   }
 
   return {
@@ -156,8 +161,6 @@ export async function updateSession(
   redirect(`/schedule?week=${f.day}`);
 }
 
-export type CopySessionState = { error: string } | undefined;
-
 /**
  * Duplicates a class into the next free slot on the same day, carrying its
  * types, capacity and notes across. The gym programmes the same session
@@ -165,12 +168,11 @@ export type CopySessionState = { error: string } | undefined;
  * convenience.
  */
 export async function copySession(
-  _prev: CopySessionState,
-  formData: FormData,
-): Promise<CopySessionState> {
+  rawId: string,
+): Promise<{ error: string } | undefined> {
   await requireAdmin();
 
-  const id = parseId(String(formData.get("id") ?? ""));
+  const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστο μάθημα." };
 
   const result = await withTransaction(async (client) => {
@@ -227,8 +229,6 @@ export async function copySession(
   return result;
 }
 
-export type CopyWeekState = { error?: string; message?: string } | undefined;
-
 /**
  * Fills a week from the one before it. Idempotent: a slot that already has a
  * class is left alone, so pressing it twice cannot duplicate a week.
@@ -240,12 +240,10 @@ export type CopyWeekState = { error?: string; message?: string } | undefined;
  * from the local date sidesteps the distinction entirely.
  */
 export async function copyLastWeek(
-  _prev: CopyWeekState,
-  formData: FormData,
-): Promise<CopyWeekState> {
+  week: string,
+): Promise<{ error?: string; message?: string }> {
   await requireAdmin();
 
-  const week = String(formData.get("week") ?? "");
   if (!isRealDate(week)) return { error: "Άγνωστη εβδομάδα." };
 
   const result = await withTransaction(async (client) => {
@@ -320,18 +318,14 @@ export async function copyLastWeek(
   return result;
 }
 
-export type DeleteSessionState = { error: string } | undefined;
-
 export async function deleteSession(
-  _prev: DeleteSessionState,
-  formData: FormData,
-): Promise<DeleteSessionState> {
+  rawId: string,
+  week: string,
+): Promise<{ error: string } | undefined> {
   await requireAdmin();
 
-  const id = parseId(String(formData.get("id") ?? ""));
+  const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστο μάθημα." };
-
-  const week = String(formData.get("week") ?? "");
 
   // class_session_types cascades. Bookings do not: a class that has any
   // cannot be deleted, because the bookings foreign key refuses - which is

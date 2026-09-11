@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import type { MemberFormState } from "@/app/actions/members";
+import { ActionForm, FormField } from "@/components/action-form";
 import { DateField } from "@/components/date-field";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,7 +38,11 @@ export function MemberForm({
   const isUpdate = Boolean(member);
 
   return (
-    <form action={formAction} className="max-w-xl space-y-4">
+    <ActionForm
+      state={state}
+      action={formAction}
+      className="max-w-xl space-y-4"
+    >
       {member && <input type="hidden" name="id" value={member.id} />}
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -146,12 +151,6 @@ export function MemberForm({
         </div>
       )}
 
-      {state?.error && (
-        <p role="alert" className="text-destructive text-sm">
-          {state.error}
-        </p>
-      )}
-
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
           {pending ? "Αποθήκευση..." : submitLabel}
@@ -163,7 +162,7 @@ export function MemberForm({
           Άκυρο
         </Link>
       </div>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -177,9 +176,9 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-2">
+    <FormField name={id}>
       <Label htmlFor={id}>{label}</Label>
       {children}
-    </div>
+    </FormField>
   );
 }

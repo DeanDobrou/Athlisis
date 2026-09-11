@@ -15,7 +15,9 @@ import { parsePriceToCents } from "@/lib/money";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
-export type MembershipFormState = { error: string } | undefined;
+export type MembershipFormState =
+  | { error: string; field?: string }
+  | undefined;
 
 type ParsedMembership = {
   userId: number;
@@ -27,21 +29,25 @@ type ParsedMembership = {
   paidOn: string | null;
 };
 
-function parseFields(formData: FormData): ParsedMembership | { error: string } {
+function parseFields(
+  formData: FormData,
+): ParsedMembership | { error: string; field: string } {
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
   const userId = parseId(get("user_id"));
-  if (userId === null) return { error: "Διάλεξε μέλος." };
+  if (userId === null) return { field: "user_id", error: "Διάλεξε μέλος." };
 
   const planId = parseId(get("plan_id"));
-  if (planId === null) return { error: "Διάλεξε πακέτο." };
+  if (planId === null) return { field: "plan_id", error: "Διάλεξε πακέτο." };
 
   const status = get("status");
-  if (!isMembershipStatus(status)) return { error: "Διάλεξε κατάσταση." };
+  if (!isMembershipStatus(status)) {
+    return { field: "status", error: "Διάλεξε κατάσταση." };
+  }
 
   const startsOn = get("starts_on");
   if (!isRealDate(startsOn)) {
-    return { error: "Δώσε υπαρκτή ημερομηνία έναρξης." };
+    return { field: "starts_on", error: "Δώσε υπαρκτή ημερομηνία έναρξης." };
   }
 
   // The money is part of the membership now: a row is a period that was paid
@@ -49,22 +55,24 @@ function parseFields(formData: FormData): ParsedMembership | { error: string } {
   // Zero is allowed and means granted rather than sold.
   const amountCents = parsePriceToCents(get("amount"));
   if (amountCents === null) {
-    return { error: "Δώσε ποσό όπως 60 ή 60,50." };
+    return { field: "amount", error: "Δώσε ποσό όπως 60 ή 60,50." };
   }
 
   const method = get("method");
-  if (!isPaymentMethod(method)) return { error: "Διάλεξε τρόπο πληρωμής." };
+  if (!isPaymentMethod(method)) {
+    return { field: "method", error: "Διάλεξε τρόπο πληρωμής." };
+  }
 
   // Blank is the money not being collected yet, which reads as Unpaid. It is
   // how the mobile app writes a membership when a member out of visits books
   // on a promise to pay, and staff can write the same thing by hand.
   const paidOn = get("paid_on");
   if (paidOn && !isRealDate(paidOn)) {
-    return { error: "Δώσε υπαρκτή ημερομηνία πληρωμής ή καθάρισέ τη αν είναι ανεξόφλητη." };
+    return { field: "paid_on", error: "Δώσε υπαρκτή ημερομηνία πληρωμής ή καθάρισέ τη αν είναι ανεξόφλητη." };
   }
 
   if (amountCents === 0 && !paidOn) {
-    return { error: "Μια δωρεάν περίοδος δεν έχει τίποτα να εισπραχθεί. Όρισε ημερομηνία πληρωμής." };
+    return { field: "paid_on", error: "Μια δωρεάν περίοδος δεν έχει τίποτα να εισπραχθεί. Όρισε ημερομηνία πληρωμής." };
   }
 
   return {
@@ -111,7 +119,7 @@ export async function createMembership(
       admin.userId,
     ],
   );
-  if (rowCount === 0) return { error: "Άγνωστο πακέτο." };
+  if (rowCount === 0) return { field: "plan_id", error: "Άγνωστο πακέτο." };
 
   revalidatePath("/memberships");
   revalidatePath(`/members/${f.userId}`);
@@ -135,7 +143,7 @@ export async function updateMembership(
   if (rawVisits) {
     const n = Number(rawVisits);
     if (!Number.isSafeInteger(n) || n < 0) {
-      return { error: "Οι υπόλοιπες επισκέψεις πρέπει να είναι μηδέν ή ακέραιος αριθμός." };
+      return { field: "visits_remaining", error: "Οι υπόλοιπες επισκέψεις πρέπει να είναι μηδέν ή ακέραιος αριθμός." };
     }
     visitsRemaining = n;
   }
@@ -183,15 +191,12 @@ export async function updateMembership(
   redirect("/memberships");
 }
 
-export type DeleteMembershipState = { error: string } | undefined;
-
 export async function deleteMembership(
-  _prev: DeleteMembershipState,
-  formData: FormData,
-): Promise<DeleteMembershipState> {
+  rawId: string,
+): Promise<{ error: string } | undefined> {
   await requireAdmin();
 
-  const id = parseId(String(formData.get("id") ?? ""));
+  const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστη συνδρομή." };
 
   // The rules - a paid membership is a receipt and stays, one the member

@@ -1,9 +1,10 @@
 import { ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 
+import { deleteSession } from "@/app/actions/class-sessions";
 import { CopySessionButton } from "@/components/copy-session-button";
 import { CopyWeekButton } from "@/components/copy-week-button";
-import { DeleteSessionButton } from "@/components/delete-session-button";
+import { DeleteButton } from "@/components/delete-button";
 import { WeekPicker } from "@/components/week-picker";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -165,9 +166,9 @@ export default async function SchedulePage({
                             >
                               <Pencil />
                             </Link>
-                            <DeleteSessionButton
-                              sessionId={s.id}
-                              week={monday}
+                            <DeleteButton
+                              action={deleteSession.bind(null, s.id, monday)}
+                              iconOnly
                               label={`το μάθημα ${s.start_time} στις ${day}`}
                             />
                           </div>

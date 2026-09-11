@@ -1,12 +1,10 @@
 "use client";
 
 import { Copy } from "lucide-react";
-import { useActionState } from "react";
+import { useTransition } from "react";
 
-import {
-  copySession,
-  type CopySessionState,
-} from "@/app/actions/class-sessions";
+import { copySession } from "@/app/actions/class-sessions";
+import { toast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 
 export function CopySessionButton({
@@ -16,35 +14,24 @@ export function CopySessionButton({
   sessionId: string;
   label: string;
 }) {
-  const [state, formAction, pending] = useActionState<
-    CopySessionState,
-    FormData
-  >(copySession, undefined);
+  const [pending, startTransition] = useTransition();
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <form action={formAction}>
-        <input type="hidden" name="id" value={sessionId} />
-        <Button
-          type="submit"
-          variant="ghost"
-          size="icon-sm"
-          disabled={pending}
-          aria-label={`Αντιγραφή ${label} στην επόμενη ελεύθερη ώρα`}
-          title="Αντιγραφή στην επόμενη ελεύθερη ώρα"
-        >
-          <Copy />
-        </Button>
-      </form>
-
-      {state?.error && (
-        <p
-          role="alert"
-          className="text-destructive max-w-40 text-right text-xs leading-snug"
-        >
-          {state.error}
-        </p>
-      )}
-    </div>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      disabled={pending}
+      onClick={() =>
+        startTransition(async () => {
+          const result = await copySession(sessionId);
+          if (result) toast.error(result.error);
+        })
+      }
+      aria-label={`Αντιγραφή ${label} στην επόμενη ελεύθερη ώρα`}
+      title="Αντιγραφή στην επόμενη ελεύθερη ώρα"
+    >
+      <Copy />
+    </Button>
   );
 }

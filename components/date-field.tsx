@@ -4,6 +4,7 @@ import { el } from "date-fns/locale";
 import { CalendarIcon } from "lucide-react";
 import { useState } from "react";
 
+import { FormField, useFieldError } from "@/components/action-form";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
@@ -50,14 +51,19 @@ export function DateField({
 }) {
   const [date, setDate] = useState<Date | undefined>(fromISODate(defaultValue));
   const [open, setOpen] = useState(false);
+  // The trigger is a button, not a control Base UI knows to mark, so a
+  // refusal about this date is wired onto it by hand.
+  const error = useFieldError(name);
 
   return (
-    <div className="grid gap-2">
+    <FormField name={name}>
       <Label htmlFor={`${name}_trigger`}>{label}</Label>
       <input type="hidden" name={name} value={date ? toISODate(date) : ""} />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           id={`${name}_trigger`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${name}-error` : undefined}
           render={
             <Button
               type="button"
@@ -103,6 +109,6 @@ export function DateField({
           )}
         </PopoverContent>
       </Popover>
-    </div>
+    </FormField>
   );
 }

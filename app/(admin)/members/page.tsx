@@ -1,7 +1,8 @@
 import { Eye, Pencil } from "lucide-react";
 import Link from "next/link";
 
-import { DeleteMemberButton } from "@/components/delete-member-button";
+import { deleteMember } from "@/app/actions/members";
+import { DeleteButton } from "@/components/delete-button";
 import { MembersToolbar } from "@/components/members-toolbar";
 import { Pagination } from "@/components/pagination";
 import { Badge } from "@/components/ui/badge";
@@ -125,9 +126,9 @@ export default async function MembersPage({
                         >
                           <Pencil />
                         </Link>
-                        <DeleteMemberButton
-                          memberId={m.id}
-                          memberName={name}
+                        <DeleteButton
+                          action={deleteMember.bind(null, m.id)}
+                          label={name}
                           iconOnly
                         />
                       </div>

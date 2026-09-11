@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { DeleteMemberButton } from "@/components/delete-member-button";
+import { deleteMember } from "@/app/actions/members";
+import { DeleteButton } from "@/components/delete-button";
 import { MembershipStateBadge } from "@/components/membership-state-badge";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -73,7 +74,10 @@ export default async function MemberPage({
             Επεξεργασία
           </Link>
           {!isSelf && (
-            <DeleteMemberButton memberId={member.id} memberName={fullName} />
+            <DeleteButton
+              action={deleteMember.bind(null, member.id)}
+              label={fullName}
+            />
           )}
         </div>
       </div>

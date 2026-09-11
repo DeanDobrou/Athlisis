@@ -9,7 +9,7 @@ import { generatePassword, hashPassword } from "@/lib/password";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
-export type MemberFormState = { error: string } | undefined;
+export type MemberFormState = { error: string; field?: string } | undefined;
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -27,10 +27,11 @@ function parseFields(formData: FormData) {
   };
 }
 
-function validate(f: Fields): string | null {
-  if (!f.firstName || !f.lastName) return "Το όνομα και το επώνυμο είναι υποχρεωτικά.";
+function validate(f: Fields): { field: string; error: string } | null {
+  if (!f.firstName) return { field: "first_name", error: "Το όνομα είναι υποχρεωτικό." };
+  if (!f.lastName) return { field: "last_name", error: "Το επώνυμο είναι υποχρεωτικό." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) {
-    return "Δώσε έγκυρη διεύθυνση email.";
+    return { field: "email", error: "Δώσε έγκυρη διεύθυνση email." };
   }
   return null;
 }
@@ -46,7 +47,7 @@ export async function createMember(
 
   const f = parseFields(formData);
   const invalid = validate(f);
-  if (invalid) return { error: invalid };
+  if (invalid) return invalid;
 
   const sendWelcomeEmail = formData.get("send_welcome_email") !== null;
 
@@ -76,7 +77,7 @@ export async function createMember(
     memberId = rows[0].id;
   } catch (err) {
     if (isDuplicateEmail(err)) {
-      return { error: "Αυτό το email χρησιμοποιείται ήδη." };
+      return { field: "email", error: "Αυτό το email χρησιμοποιείται ήδη." };
     }
     throw err;
   }
@@ -101,7 +102,7 @@ export async function updateMember(
 
   const f = parseFields(formData);
   const invalid = validate(f);
-  if (invalid) return { error: invalid };
+  if (invalid) return invalid;
 
   const status =
     String(formData.get("status") ?? "") === "inactive" ? "inactive" : "active";
@@ -114,7 +115,8 @@ export async function updateMember(
   const password = String(formData.get("password") ?? "");
   if (password && password.length < MIN_PASSWORD_LENGTH) {
     return {
-      error: `A new password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+      field: "password",
+      error: `Ο νέος κωδικός πρέπει να έχει τουλάχιστον ${MIN_PASSWORD_LENGTH} χαρακτήρες.`,
     };
   }
   const passwordHash = password ? await hashPassword(password) : null;
@@ -141,7 +143,7 @@ export async function updateMember(
     if (rowCount === 0) return { error: "Άγνωστο μέλος." };
   } catch (err) {
     if (isDuplicateEmail(err)) {
-      return { error: "Αυτό το email χρησιμοποιείται ήδη." };
+      return { field: "email", error: "Αυτό το email χρησιμοποιείται ήδη." };
     }
     throw err;
   }
@@ -151,15 +153,12 @@ export async function updateMember(
   redirect(`/members/${id}`);
 }
 
-export type DeleteMemberState = { error: string } | undefined;
-
 export async function deleteMember(
-  _prev: DeleteMemberState,
-  formData: FormData,
-): Promise<DeleteMemberState> {
+  rawId: string,
+): Promise<{ error: string } | undefined> {
   const admin = await requireAdmin();
 
-  const id = parseId(String(formData.get("id") ?? ""));
+  const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστο μέλος." };
   if (id === admin.userId) {
     return { error: "Δεν μπορείς να διαγράψεις τον δικό σου λογαριασμό." };

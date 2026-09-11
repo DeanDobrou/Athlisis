@@ -9,7 +9,7 @@ import { parsePriceToCents } from "@/lib/money";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
-export type PlanFormState = { error: string } | undefined;
+export type PlanFormState = { error: string; field?: string } | undefined;
 
 type ParsedPlan = {
   name: string;
@@ -18,20 +18,24 @@ type ParsedPlan = {
   visits: number | null;
 };
 
-function parseFields(formData: FormData): ParsedPlan | { error: string } {
+function parseFields(
+  formData: FormData,
+): ParsedPlan | { error: string; field: string } {
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
   const name = get("name").slice(0, 100);
-  if (!name) return { error: "Το όνομα του πακέτου είναι υποχρεωτικό." };
+  if (!name) {
+    return { field: "name", error: "Το όνομα του πακέτου είναι υποχρεωτικό." };
+  }
 
   const priceCents = parsePriceToCents(get("price"));
   if (priceCents === null) {
-    return { error: "Δώσε τιμή όπως 45 ή 45,50." };
+    return { field: "price", error: "Δώσε τιμή όπως 45 ή 45,50." };
   }
 
   const billingInterval = get("billing_interval");
   if (!isBillingInterval(billingInterval)) {
-    return { error: "Διάλεξε συχνότητα χρέωσης." };
+    return { field: "billing_interval", error: "Διάλεξε συχνότητα χρέωσης." };
   }
 
   // Blank means unlimited, which the column stores as NULL.
@@ -41,6 +45,7 @@ function parseFields(formData: FormData): ParsedPlan | { error: string } {
     const n = Number(rawVisits);
     if (!Number.isSafeInteger(n) || n < 1) {
       return {
+        field: "visits",
         error:
           "Οι επισκέψεις πρέπει να είναι ακέραιος μεγαλύτερος του μηδενός ή κενό για απεριόριστες.",
       };
@@ -101,15 +106,12 @@ export async function updatePlan(
   redirect("/plans");
 }
 
-export type DeletePlanState = { error: string } | undefined;
-
 export async function deletePlan(
-  _prev: DeletePlanState,
-  formData: FormData,
-): Promise<DeletePlanState> {
+  rawId: string,
+): Promise<{ error: string } | undefined> {
   await requireAdmin();
 
-  const id = parseId(String(formData.get("id") ?? ""));
+  const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστο πακέτο." };
 
   try {

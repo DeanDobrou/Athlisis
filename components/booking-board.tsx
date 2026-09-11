@@ -16,11 +16,10 @@ import {
 import { Plus } from "lucide-react";
 import {
   Fragment,
-  useEffect,
+  startTransition,
   useOptimistic,
   useRef,
   useState,
-  useTransition,
 } from "react";
 
 import {
@@ -28,6 +27,8 @@ import {
   cancelBookingAction,
   moveBookingAction,
 } from "@/app/actions/bookings";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { toast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -48,13 +49,6 @@ type Member = { id: string; name: string };
 type Change =
   | { type: "move"; bookingId: string; to: string }
   | { type: "remove"; bookingId: string };
-
-type Message = {
-  text: string;
-  tone: "error" | "info";
-  /** A move can be taken back: this booking returns to this class. */
-  undo?: { bookingId: string; to: string };
-};
 
 /**
  * Greek names compared the way member search does on the server: accents off,
@@ -81,9 +75,9 @@ function label(c: ClassSession): string {
  * Moves and cancellations show at once and settle when the server answers.
  * If the server refuses, the transition ends without the page refreshing, so
  * useOptimistic falls back to the real bookings and the member is back where
- * they were, with the reason shown. The rules checked here are only the ones
- * the board can see; lib/bookings.ts decides, including whether the paying
- * membership covers the new day.
+ * they were, with the reason in a toast. The rules checked here are only the
+ * ones the board can see; lib/bookings.ts decides, including whether the
+ * paying membership covers the new day.
  *
  * ponytail: every class is assumed to start on one of SLOTS - the schedule
  * form only offers those, and all current classes do. A class at any other
@@ -111,10 +105,11 @@ export function BookingBoard({
           )
         : state.filter((b) => b.id !== change.bookingId),
   );
-  const [pending, startTransition] = useTransition();
   const [dragging, setDragging] = useState<WeekBooking | null>(null);
-  const [message, setMessage] = useState<Message | null>(null);
   const [addingTo, setAddingTo] = useState<string | null>(null);
+  // Two pieces so the dialog keeps its text while it fades out after closing.
+  const [confirming, setConfirming] = useState(false);
+  const [toCancel, setToCancel] = useState<WeekBooking | null>(null);
   const isMobile = useIsMobile();
 
   // A drag that ends on its own chip can still fire a click. This swallows
@@ -130,12 +125,6 @@ export function BookingBoard({
       activationConstraint: { delay: 250, tolerance: 8 },
     }),
   );
-
-  useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => setMessage(null), 6000);
-    return () => clearTimeout(timer);
-  }, [message]);
 
   const classById = new Map(classes.map((c) => [c.id, c]));
   const inClass = (classId: string) =>
@@ -158,55 +147,43 @@ export function BookingBoard({
     return null;
   }
 
-  function move(booking: WeekBooking, target: ClassSession, offerUndo = true) {
+  function move(booking: WeekBooking, target: ClassSession) {
     if (target.id === booking.session_id) return;
     const why = refusal(booking, target);
     if (why) {
-      setMessage({ text: why, tone: "error" });
+      toast.error(why);
       return;
     }
-    const from = booking.session_id;
+    send(booking, target, classById.get(booking.session_id));
+  }
+
+  /**
+   * Shows a move at once and saves it, offering Undo back to `back`. Undo
+   * comes here directly rather than through refusal(): by the time anyone
+   * presses it this render's view of the board is stale, and the server
+   * checks the move anyway.
+   */
+  function send(booking: WeekBooking, target: ClassSession, back?: ClassSession) {
     startTransition(async () => {
       applyChange({ type: "move", bookingId: booking.id, to: target.id });
       const result = await moveBookingAction(booking.id, target.id);
       if ("error" in result) {
-        setMessage({ text: result.error, tone: "error" });
+        toast.error(result.error);
         return;
       }
-      setMessage({
-        text: `${booking.member_name}: ${label(target)}`,
-        tone: "info",
-        undo: offerUndo ? { bookingId: booking.id, to: from } : undefined,
-      });
+      toast.info(
+        `${booking.member_name}: ${label(target)}`,
+        back && { label: "Αναίρεση", onClick: () => send(booking, back) },
+      );
     });
   }
 
-  function undo() {
-    const back = message?.undo;
-    setMessage(null);
-    if (!back) return;
-    const booking = shown.find((b) => b.id === back.bookingId);
-    const target = classById.get(back.to);
-    if (booking && target) move(booking, target, false);
-  }
-
   function cancel(booking: WeekBooking) {
-    const cls = classById.get(booking.session_id);
-    const where = cls ? `, ${label(cls)}` : "";
-    if (!confirm(`Ακύρωση της κράτησης για ${booking.member_name}${where};`)) {
-      return;
-    }
     startTransition(async () => {
       applyChange({ type: "remove", bookingId: booking.id });
       const result = await cancelBookingAction(booking.id);
-      setMessage(
-        "error" in result
-          ? { text: result.error, tone: "error" }
-          : {
-              text: `Η κράτηση για ${booking.member_name} ακυρώθηκε.`,
-              tone: "info",
-            },
-      );
+      if ("error" in result) toast.error(result.error);
+      else toast.info(`Η κράτηση για ${booking.member_name} ακυρώθηκε.`);
     });
   }
 
@@ -214,14 +191,8 @@ export function BookingBoard({
     setAddingTo(null);
     startTransition(async () => {
       const result = await bookMemberAction(member.id, target.id);
-      setMessage(
-        "error" in result
-          ? { text: result.error, tone: "error" }
-          : {
-              text: result.notice ?? `${member.name}: ${label(target)}`,
-              tone: "info",
-            },
-      );
+      if ("error" in result) toast.error(result.error);
+      else toast.info(result.notice ?? `${member.name}: ${label(target)}`);
     });
   }
 
@@ -242,10 +213,12 @@ export function BookingBoard({
 
   function tapBooking(booking: WeekBooking) {
     if (justDragged.current) return;
-    cancel(booking);
+    setToCancel(booking);
+    setConfirming(true);
   }
 
   const addClass = addingTo ? classById.get(addingTo) : undefined;
+  const cancelClass = toCancel ? classById.get(toCancel.session_id) : undefined;
 
   return (
     <>
@@ -349,24 +322,16 @@ export function BookingBoard({
         </SheetContent>
       </Sheet>
 
-      {(message || pending) && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
-          <div
-            role={message?.tone === "error" ? "alert" : "status"}
-            className={cn(
-              "bg-background pointer-events-auto flex items-center gap-3 rounded-lg border px-4 py-2 text-sm shadow-lg",
-              message?.tone === "error" && "border-destructive/50 text-destructive",
-            )}
-          >
-            <span>{message?.text ?? "Αποθήκευση..."}</span>
-            {message?.undo && (
-              <Button type="button" size="sm" variant="outline" onClick={undo}>
-                Αναίρεση
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Ακύρωση κράτησης;"
+        description={`${toCancel?.member_name ?? ""}${cancelClass ? `, ${label(cancelClass)}` : ""}`}
+        confirmLabel="Ακύρωση κράτησης"
+        onConfirm={() => {
+          if (toCancel) cancel(toCancel);
+        }}
+      />
     </>
   );
 }

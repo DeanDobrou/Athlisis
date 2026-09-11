@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import type { PlanFormState } from "@/app/actions/plans";
+import { ActionForm, FormField } from "@/components/action-form";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +25,11 @@ export function PlanForm({
   const [state, formAction, pending] = useActionState(action, undefined);
 
   return (
-    <form action={formAction} className="max-w-xl space-y-4">
+    <ActionForm
+      state={state}
+      action={formAction}
+      className="max-w-xl space-y-4"
+    >
       {plan && <input type="hidden" name="id" value={plan.id} />}
 
       <Field id="name" label="Όνομα">
@@ -59,7 +64,7 @@ export function PlanForm({
         </Field>
       </div>
 
-      <div className="grid gap-2">
+      <FormField name="billing_interval">
         <span className="text-sm font-medium">Συχνότητα χρέωσης</span>
         <RadioGroup
           name="billing_interval"
@@ -81,13 +86,7 @@ export function PlanForm({
           Use One time for a visit pack: set the visits and leave it off
           renewal.
         </p>
-      </div>
-
-      {state?.error && (
-        <p role="alert" className="text-destructive text-sm">
-          {state.error}
-        </p>
-      )}
+      </FormField>
 
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={pending}>
@@ -97,7 +96,7 @@ export function PlanForm({
           Άκυρο
         </Link>
       </div>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -111,9 +110,9 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-2">
+    <FormField name={id}>
       <Label htmlFor={id}>{label}</Label>
       {children}
-    </div>
+    </FormField>
   );
 }

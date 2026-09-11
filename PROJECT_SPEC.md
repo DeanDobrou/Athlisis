@@ -803,8 +803,11 @@ members screen ships.
 | `app/(admin)/members/*` | list, view, create, update | done |
 | `components/member-form.tsx` | shared create/update form | done |
 | `components/members-toolbar.tsx` | live filters, reset, add | done |
-| `components/delete-member-button.tsx` | delete with confirm and guard messages | done |
-| `app/login/login-form.tsx` | client form, `useActionState` errors | done |
+| `components/delete-button.tsx` | every delete: asks first, a refusal shows as a toast | done |
+| `components/action-form.tsx` | every create/update form: errors under their field or at the top | done |
+| `components/confirm-dialog.tsx` | the app's replacement for the browser's `confirm()` | done |
+| `components/toaster.tsx` | toasts for button results; mounted in the admin layout | done |
+| `app/login/login-form.tsx` | client form on `ActionForm`, errors at the top | done |
 | `app/login/page.tsx` | login card | done |
 | `app/(admin)/layout.tsx` | sidebar shell; deliberately holds **no** auth check | done |
 | `app/(admin)/dashboard/page.tsx` | calls `requireAdmin()`; otherwise a stub | stub |
@@ -819,6 +822,17 @@ after the first page load. `proxy.ts` does a cheap cookie check to keep logged
 -out users out, and every admin page and Server Action calls `requireAdmin()`
 itself - a Server Action is its own entry point and a page-level check does not
 cover it.
+
+**How the app reports a refusal.** The Server Action is the only validator:
+forms set `noValidate`, so every message is the server's, in Greek. An action
+refuses with `{ field, error }`; `ActionForm` puts the message under that field
+and outlines its input red, puts an error with no field in an alert at the top,
+and moves focus to whichever it is. It submits through `onSubmit` rather than
+`<form action>`, because React resets a form after its action runs and a refused
+save would lose everything typed. Buttons that are not forms - deletes, the
+schedule's copy buttons, the bookings board - report through toasts. Anything
+that cannot be undone asks first in `ConfirmDialog`, never the browser's
+`confirm()`.
 
 **`lib/db.ts` notes:** the pool is cached on `globalThis` because Next.js
 hot-reload re-evaluates modules and would otherwise leak a new pool on every

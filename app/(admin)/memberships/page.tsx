@@ -1,7 +1,8 @@
 import { Pencil } from "lucide-react";
 import Link from "next/link";
 
-import { DeleteMembershipButton } from "@/components/delete-membership-button";
+import { deleteMembership } from "@/app/actions/memberships";
+import { DeleteButton } from "@/components/delete-button";
 import { MembershipStateBadge } from "@/components/membership-state-badge";
 import { MembershipsToolbar } from "@/components/memberships-toolbar";
 import { Pagination } from "@/components/pagination";
@@ -125,8 +126,9 @@ export default async function MembershipsPage({
                       >
                         <Pencil />
                       </Link>
-                      <DeleteMembershipButton
-                        membershipId={ms.id}
+                      <DeleteButton
+                        action={deleteMembership.bind(null, ms.id)}
+                        iconOnly
                         label={`συνδρομή ${ms.plan_name} για ${ms.member_name}`}
                       />
                     </div>

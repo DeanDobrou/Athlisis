@@ -7,7 +7,9 @@ import { db, hasPgCode } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
-export type ClassTypeFormState = { error: string } | undefined;
+export type ClassTypeFormState =
+  | { error: string; field?: string }
+  | undefined;
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -18,15 +20,15 @@ type ParsedClassType = {
 
 function parseFields(
   formData: FormData,
-): ParsedClassType | { error: string } {
+): ParsedClassType | { error: string; field: string } {
   const get = (key: string) => String(formData.get(key) ?? "").trim();
 
   const name = get("name").slice(0, 100);
-  if (!name) return { error: "Το όνομα είναι υποχρεωτικό." };
+  if (!name) return { field: "name", error: "Το όνομα είναι υποχρεωτικό." };
 
   const colorHex = get("color_hex");
   if (colorHex && !HEX_COLOR.test(colorHex)) {
-    return { error: "Διάλεξε χρώμα." };
+    return { field: "color_hex", error: "Διάλεξε χρώμα." };
   }
 
   return { name, colorHex: colorHex ? colorHex.toUpperCase() : null };
@@ -72,15 +74,12 @@ export async function updateClassType(
   redirect("/class-types");
 }
 
-export type DeleteClassTypeState = { error: string } | undefined;
-
 export async function deleteClassType(
-  _prev: DeleteClassTypeState,
-  formData: FormData,
-): Promise<DeleteClassTypeState> {
+  rawId: string,
+): Promise<{ error: string } | undefined> {
   await requireAdmin();
 
-  const id = parseId(String(formData.get("id") ?? ""));
+  const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστος τύπος μαθήματος." };
 
   try {

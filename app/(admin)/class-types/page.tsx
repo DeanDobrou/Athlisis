@@ -1,7 +1,8 @@
 import { Pencil } from "lucide-react";
 import Link from "next/link";
 
-import { DeleteClassTypeButton } from "@/components/delete-class-type-button";
+import { deleteClassType } from "@/app/actions/class-types";
+import { DeleteButton } from "@/components/delete-button";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
@@ -69,9 +70,10 @@ export default async function ClassTypesPage() {
                       >
                         <Pencil />
                       </Link>
-                      <DeleteClassTypeButton
-                        classTypeId={c.id}
-                        name={c.name}
+                      <DeleteButton
+                        action={deleteClassType.bind(null, c.id)}
+                        label={c.name}
+                        iconOnly
                       />
                     </div>
                   </TableCell>
