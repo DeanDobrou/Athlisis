@@ -26,6 +26,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 // Grouped by how often staff touch a screen, not by how the tables relate.
@@ -66,11 +67,15 @@ const nav = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
+  const closeOnPhone = () => setOpenMobile(false);
 
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-4 text-xl font-semibold tracking-wide">
-        Athlisis
+        <Link href="/dashboard" className="self-start" onClick={closeOnPhone}>
+          Athlisis
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         {nav.map((group) => (
@@ -85,7 +90,7 @@ export function AppSidebar() {
                 {group.items.map((item) => (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
-                      render={<Link href={item.href} />}
+                      render={<Link href={item.href} onClick={closeOnPhone} />}
                       // Exact, or a child route. A bare startsWith lit up
                       // Members on /memberships, since that is a prefix.
                       isActive={
