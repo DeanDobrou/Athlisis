@@ -9,6 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ClassType } from "@/lib/class-types";
+import { guarded } from "@/lib/utils";
 
 const DEFAULT_COLOR = "#E5484D";
 
@@ -24,7 +25,10 @@ export function ClassTypeForm({
   classType?: ClassType;
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, formAction, pending] = useActionState(
+    guarded(action),
+    undefined,
+  );
 
   return (
     <ActionForm

@@ -7,10 +7,11 @@ import { ActionForm } from "@/components/action-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { guarded } from "@/lib/utils";
 
 export function LoginForm() {
   const [state, action, pending] = useActionState<LoginState, FormData>(
-    login,
+    guarded(login),
     undefined,
   );
   // A login error is never about one field - saying which would tell an

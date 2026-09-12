@@ -399,6 +399,115 @@ try {
     const attended = await moveBooking(client, inMarch, await session(TUE));
     check(!attended.ok, "a checked-in booking cannot be moved");
   }
+  const { checkInBooking, saveSessionCheckIns, undoCheckIn } = await import(
+    "@/lib/bookings"
+  );
+  const statusOf = async (id: number) =>
+    (
+      await one<{ status: string }>(
+        "SELECT status FROM bookings WHERE id = $1",
+        [id],
+      )
+    ).status;
+  {
+    const u = await user("checkin");
+    const p = await membership(u, await plan(5, 3000), 5);
+    const booked = await book(u, await session(MON));
+    const id = booked.ok ? Number(booked.bookingId) : 0;
+
+    const visitsBefore = await visitsOf(p);
+    const marked = await checkInBooking(client, id);
+    check(
+      marked.ok && (await statusOf(id)) === "checked_in",
+      "check-in marks the booking present",
+    );
+    check(
+      (await visitsOf(p)) === visitsBefore,
+      "check-in neither spends nor returns a visit",
+    );
+    check(!(await checkInBooking(client, id)).ok, "checking in twice is refused");
+    check(
+      !(await cancelBooking(client, id)).ok,
+      "a checked-in booking cannot be cancelled",
+    );
+
+    const back = await undoCheckIn(client, id);
+    check(
+      back.ok && (await statusOf(id)) === "booked",
+      "undo returns it to a plain booking",
+    );
+    check(!(await undoCheckIn(client, id)).ok, "undoing twice is refused");
+
+    await cancelBooking(client, id);
+    check(
+      !(await checkInBooking(client, id)).ok,
+      "a cancelled booking cannot be checked in",
+    );
+
+    // The member who owes is exactly the one staff check in: that is the
+    // moment the cash is collected, so it must never be refused.
+    const owing = await user("checkin-owing");
+    await membership(owing, await plan(12, 6000), 0);
+    const promised = await book(owing, await session(TUE));
+    check(
+      (await checkInBooking(client, promised.ok ? Number(promised.bookingId) : 0))
+        .ok,
+      "a member who owes money can still be checked in",
+    );
+  }
+  {
+    // Two members on the day, one of them already checked in.
+    const a = await user("roll-a");
+    const b = await user("roll-b");
+    await unlimitedMarch(a);
+    await unlimitedMarch(b);
+    const cls = await session(WED);
+    const bookA = await book(a, cls);
+    const bookB = await book(b, cls);
+    const idA = bookA.ok ? Number(bookA.bookingId) : 0;
+    const idB = bookB.ok ? Number(bookB.bookingId) : 0;
+    await checkInBooking(client, idB);
+
+    // Saving marks A present and takes B's check-in back in one go.
+    const saved = await saveSessionCheckIns(client, cls, new Set([idA]));
+    check(
+      saved.checkedIn === 1 &&
+        saved.undone === 1 &&
+        saved.refused.length === 0 &&
+        (await statusOf(idA)) === "checked_in" &&
+        (await statusOf(idB)) === "booked",
+      "saving a class checks in who is ticked and undoes who is not",
+    );
+
+    const again = await saveSessionCheckIns(client, cls, new Set([idA]));
+    check(
+      again.checkedIn === 0 && again.undone === 0,
+      "saving the same roll call again writes nothing",
+    );
+
+    // A booking cancelled while the page was open holds no place any more, so
+    // it is not part of the class's roll call at all.
+    await cancelBooking(client, idB);
+    const withGone = await saveSessionCheckIns(
+      client,
+      cls,
+      new Set([idA, idB]),
+    );
+    check(
+      withGone.refused.length === 0 && (await statusOf(idB)) === "cancelled",
+      "a cancelled booking is left out of the class entirely",
+    );
+
+    const other = await saveSessionCheckIns(
+      client,
+      await session(THU),
+      new Set([idA]),
+    );
+    check(
+      other.checkedIn === 0 && (await statusOf(idA)) === "checked_in",
+      "saving another class leaves this one alone",
+    );
+  }
   {
     const { listWeekBookings } = await import("@/lib/class-sessions");
     const paying = await user("week-paying");

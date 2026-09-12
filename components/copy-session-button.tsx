@@ -6,6 +6,7 @@ import { useTransition } from "react";
 import { copySession } from "@/app/actions/class-sessions";
 import { toast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
+import { attempt } from "@/lib/utils";
 
 export function CopySessionButton({
   sessionId,
@@ -24,7 +25,7 @@ export function CopySessionButton({
       disabled={pending}
       onClick={() =>
         startTransition(async () => {
-          const result = await copySession(sessionId);
+          const result = await attempt(() => copySession(sessionId));
           if (result) toast.error(result.error);
         })
       }

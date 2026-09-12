@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { BILLING_INTERVALS } from "@/lib/enums";
 import { formatCents } from "@/lib/money";
 import type { Plan } from "@/lib/plans";
+import { guarded } from "@/lib/utils";
 
 export function PlanForm({
   action,
@@ -22,7 +23,10 @@ export function PlanForm({
   plan?: Plan;
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, formAction, pending] = useActionState(
+    guarded(action),
+    undefined,
+  );
 
   return (
     <ActionForm

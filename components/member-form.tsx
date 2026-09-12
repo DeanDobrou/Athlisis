@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Member } from "@/lib/members";
+import { guarded } from "@/lib/utils";
 
 const STATUS_ITEMS = { active: "Ενεργό", inactive: "Ανενεργό" };
 
@@ -34,7 +35,10 @@ export function MemberForm({
   member?: Member;
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, formAction, pending] = useActionState(
+    guarded(action),
+    undefined,
+  );
   const isUpdate = Boolean(member);
 
   return (

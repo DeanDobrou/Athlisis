@@ -23,6 +23,7 @@ import type { Member } from "@/lib/members";
 import { formatCents } from "@/lib/money";
 import type { Membership } from "@/lib/memberships";
 import type { Plan } from "@/lib/plans";
+import { guarded } from "@/lib/utils";
 
 export function MembershipForm({
   action,
@@ -40,7 +41,10 @@ export function MembershipForm({
   membership?: Membership;
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, formAction, pending] = useActionState(
+    guarded(action),
+    undefined,
+  );
 
   // The plan drives the amount: a period is nearly always sold at its list
   // price, so choosing the plan fills it in and typing over it is the

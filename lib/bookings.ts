@@ -250,6 +250,115 @@ export async function cancelBooking(
   return { ok: true };
 }
 
+/**
+ * Check-in and its undo are the same statement with the ends swapped, so they
+ * are one function behind the two names below. Neither moves a visit - it was
+ * spent at booking - which is what makes a mis-tapped tick safe to take back.
+ *
+ * The member lock is taken even though one row changes: voidUnpaidMembership
+ * holds it while deciding whether the member trained on an unpaid membership,
+ * so a check-in cannot land in the middle of a void.
+ */
+async function setPresence(
+  client: PoolClient,
+  bookingId: number,
+  present: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { rows: found } = await client.query<{ user_id: string }>(
+    "SELECT user_id FROM bookings WHERE id = $1",
+    [bookingId],
+  );
+  if (found.length === 0) return { ok: false, error: "Άγνωστη κράτηση." };
+  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [
+    found[0].user_id,
+  ]);
+
+  // The status in the WHERE is the guard: no row means the booking was not in
+  // the state this move starts from.
+  const { rowCount } = await client.query(
+    present
+      ? `UPDATE bookings SET status = 'checked_in', checked_in_at = now()
+         WHERE id = $1 AND status = 'booked'`
+      : `UPDATE bookings SET status = 'booked', checked_in_at = NULL
+         WHERE id = $1 AND status = 'checked_in'`,
+    [bookingId],
+  );
+  if (rowCount === 0) {
+    return {
+      ok: false,
+      error: present
+        ? "Γίνεται check-in μόνο σε ενεργή κράτηση."
+        : "Η κράτηση δεν έχει check-in.",
+    };
+  }
+  return { ok: true };
+}
+
+export function checkInBooking(client: PoolClient, bookingId: number) {
+  return setPresence(client, bookingId, true);
+}
+
+/** Takes a check-in back, for the tap that hit the wrong name. */
+export function undoCheckIn(client: PoolClient, bookingId: number) {
+  return setPresence(client, bookingId, false);
+}
+
+export type CheckInSaveResult = {
+  checkedIn: number;
+  undone: number;
+  refused: string[];
+};
+
+/**
+ * One class's roll call, saved in one go: every booking on it that is ticked
+ * is checked in, every one that is not is returned to a plain booking. The
+ * caller sends who is present, not what changed, so the diff is worked out
+ * here against what the database actually holds - two admins saving the same
+ * class cannot then talk past each other about a booking one of them never
+ * saw.
+ *
+ * Rows are walked in id order so that concurrent saves of the same class take
+ * the per-member locks in the same order and cannot deadlock.
+ *
+ * A booking someone cancelled or moved while the page was open is refused by
+ * checkInBooking rather than forced, and its member is named in `refused`. The
+ * rest of the save still stands: losing a whole class's ticks because one
+ * member left would be worse than reporting the one.
+ */
+export async function saveSessionCheckIns(
+  client: PoolClient,
+  sessionId: number,
+  present: ReadonlySet<number>,
+): Promise<CheckInSaveResult> {
+  const { rows } = await client.query<{
+    id: string;
+    status: string;
+    member_name: string;
+  }>(
+    `SELECT b.id, b.status, u.first_name || ' ' || u.last_name AS member_name
+     FROM bookings b
+     JOIN users u ON u.id = b.user_id
+     WHERE b.class_session_id = $1 AND b.status IN ${HOLDS_A_PLACE}
+     ORDER BY b.id`,
+    [sessionId],
+  );
+
+  const result: CheckInSaveResult = { checkedIn: 0, undone: 0, refused: [] };
+  for (const row of rows) {
+    const id = Number(row.id);
+    const wanted = present.has(id);
+    if (wanted === (row.status === "checked_in")) continue;
+
+    const done = wanted
+      ? await checkInBooking(client, id)
+      : await undoCheckIn(client, id);
+    if (!done.ok) result.refused.push(row.member_name);
+    else if (wanted) result.checkedIn += 1;
+    else result.undone += 1;
+  }
+  return result;
+}
+
 export type MoveResult = { ok: true } | { ok: false; error: string };
 
 /**

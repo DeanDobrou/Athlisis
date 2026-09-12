@@ -556,6 +556,43 @@ also the guard against a tap that was meant to be a drag. Moving is only ever a
 drag: there is deliberately no second way to move from a list. A checked-in
 member is not tappable.
 
+**Check-in is not on the chip - each class carries its own button.** Every
+class on the board has a roll-call button beside its `+`, opening
+`/bookings/[id]` for that class: every member in it, one full-width row each
+with a tick. One button marks the whole class present; Save writes it and Πίσω
+leaves it, and both return to the board. Save only leaves on success, because
+navigating away from a save that did not happen would throw the roll call away
+at the one moment it still matters.
+
+**Per class, not per day.** Check-in happens at the door of one class, at the
+hour that class runs, so the screen holds exactly the eight names in front of
+you rather than the day's forty. It also means the roll call needs no date
+handling at all: the class id is the whole address.
+
+The first attempt put a small tick inside the board chip and it was wrong on a
+phone twice over. The target was 20px, and it sat *inside* the draggable, so a
+press held past the touch drag delay started a drag and swallowed the tap: a
+quick tap checked someone in, a slow one did not. The chip's two gestures were
+already spoken for - drag to move, tap to cancel - so the third action needed
+its own surface rather than a third way to press the same thing.
+
+**A page, not a dialog.** The ticks are unsaved state, and every dialog in this
+app closes on an outside click and on Escape - which is right for the confirm
+dialog, where closing means "no", and wrong here, where it would throw a
+half-finished roll call away. Keeping them would mean a dialog that refuses to
+close, which is a dialog apologising for not being a page. A page also gives
+the full width of a phone to rows that have to be hit while someone stands at
+the door, survives a reload, and can be reopened by link.
+
+**Save sends who is present, not what changed.** The diff is worked out on the
+server against what the database holds, so two admins saving the same class
+cannot talk past each other about a booking one of them never saw. A booking
+cancelled or moved while the page was open is refused by name and the rest of
+the save still stands - losing a whole class's ticks because one member left
+would be worse than reporting the one. Nothing is confirmed first, because
+nothing here is destructive: no visit moves in either direction, since the
+visit was spent at booking, so a mis-tick is untapped and saved again.
+
 **The `+` in a class opens a sheet** - from the right on a computer, from the
 bottom on a phone - with a searchable member list. A booking made there
 resolves entitlement through exactly the same path as one made from the phone,
@@ -784,11 +821,13 @@ members screen ships.
 | `db/migrations/015_unaccent_for_greek_search.sql` | `unaccent` for Greek-name search | applied |
 | `db/migrations/016_booking_records_its_membership.sql` | `bookings.membership_id`, the membership that paid | applied |
 | `lib/db.ts` | single pool, `withTransaction`, `greekFold()` | done |
-| `lib/bookings.ts` | booking rules: book, cancel, void an unpaid membership (§8) | done |
+| `lib/bookings.ts` | booking rules: book, cancel, move, check in, void an unpaid membership (§8) | done |
 | `scripts/check-bookings.mts` | `npm run check:bookings`: every booking rule against the real database, rolled back | done |
 | `app/(admin)/bookings/page.tsx` | Κρατήσεις: loads the week and renders the board | done |
 | `components/booking-board.tsx` | the board: drag to move, tap to cancel, `+` to add, Undo | done |
-| `app/actions/bookings.ts` | book, cancel and move, called directly by the board | done |
+| `app/(admin)/bookings/[id]/page.tsx` | Παρουσίες: one class's roll call | done |
+| `components/session-check-in.tsx` | the roll call: tick, all-present, Save and Πίσω | done |
+| `app/actions/bookings.ts` | book, cancel, move, and save a class's check-ins | done |
 | `components/week-picker.tsx` | week jumper shared by both week pages (`basePath`) | done |
 | `scripts/migrate.mjs` | migration runner (`--dry-run`) | done |
 | `app/api/health/route.ts` | connectivity smoke test | done |
@@ -870,9 +909,12 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
    `npm run check:bookings`; and the **Κρατήσεις** board, where staff drag
    members between classes and tap to cancel or add. Deferred: waitlists and
    `settings` (§8)
-6. Check-in - on the board, beside the Unpaid dot staff collect against. With a
-   tap on a member now meaning cancel, how staff check a member in is still to
-   decide. Member self-check-in deferred
+6. **Done** - **Check-in.** A roll call per class at `/bookings/[id]`, opened
+   from that class on the board: big rows, an "all present" button, and one
+   Save. `checkInBooking`, `undoCheckIn` and `saveSessionCheckIns` in
+   `lib/bookings.ts`, checked by `npm run check:bookings`. No schema change was
+   needed - `checked_in` and `checked_in_at` have been there since `001`.
+   Member self-check-in deferred, and so is marking a no-show
 7. WODs - program, publish, show on the schedule
 
 **Then:** mobile app (Expo) → pull sync → scores + leaderboard (brings push sync with them) → push notifications → benchmarks.

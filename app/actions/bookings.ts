@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
-import { bookMember, cancelBooking, moveBooking } from "@/lib/bookings";
+import {
+  bookMember,
+  cancelBooking,
+  moveBooking,
+  saveSessionCheckIns,
+} from "@/lib/bookings";
 import { withTransaction } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
@@ -63,6 +68,45 @@ export async function cancelBookingAction(
   revalidatePath("/bookings");
   revalidatePath("/memberships");
   return { ok: true };
+}
+
+/**
+ * Saves one class's roll call. The page sends who is present; the diff against
+ * what is stored is worked out in saveSessionCheckIns, inside one transaction.
+ */
+export async function saveCheckInsAction(
+  sessionId: string,
+  presentIds: string[],
+): Promise<BoardResult> {
+  await requireAdmin();
+
+  const session = parseId(sessionId);
+  if (session === null) return { error: "Άγνωστο μάθημα." };
+
+  const present = new Set<number>();
+  for (const raw of presentIds) {
+    const id = parseId(raw);
+    if (id === null) return { error: "Άγνωστη κράτηση." };
+    present.add(id);
+  }
+
+  const { checkedIn, undone, refused } = await withTransaction((client) =>
+    saveSessionCheckIns(client, session, present),
+  );
+
+  // Attendance moves no money and no visit, so only the two screens that show
+  // it change.
+  revalidatePath("/bookings");
+  revalidatePath(`/bookings/${session}`);
+
+  const saved = `${checkedIn} check-in, ${undone} αναιρέσεις.`;
+  return {
+    ok: true,
+    notice:
+      refused.length > 0
+        ? `${saved} Δεν άλλαξαν: ${refused.join(", ")} - η κράτηση άλλαξε στο μεταξύ.`
+        : saved,
+  };
 }
 
 export async function moveBookingAction(

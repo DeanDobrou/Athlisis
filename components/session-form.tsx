@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ClassSession } from "@/lib/class-sessions";
 import type { ClassType } from "@/lib/class-types";
 import { DEFAULT_SLOT, findSlot, SLOTS, type Slot } from "@/lib/slots";
+import { guarded } from "@/lib/utils";
 
 export function SessionForm({
   action,
@@ -40,7 +41,10 @@ export function SessionForm({
   defaultSlot?: Slot;
   submitLabel: string;
 }) {
-  const [state, formAction, pending] = useActionState(action, undefined);
+  const [state, formAction, pending] = useActionState(
+    guarded(action),
+    undefined,
+  );
 
   // Controlled so a slot button can set both at once. The slots are the
   // everyday path; the inputs below stay as the escape hatch, so if the gym

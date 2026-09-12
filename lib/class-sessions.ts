@@ -107,32 +107,56 @@ export type WeekBooking = {
 };
 
 /**
+ * Shared by both booking reads below, so the board and the roll call can never
+ * disagree about what a booking is. unpaid is the paying membership reading as
+ * Unpaid through membershipState(), the same definition the memberships grid
+ * uses.
+ */
+const BOOKING_COLUMNS = `b.id, b.class_session_id AS session_id, b.user_id,
+  u.first_name || ' ' || u.last_name AS member_name,
+  b.status,
+  (${membershipState("m")}) = 'unpaid' AS unpaid`;
+
+const BOOKING_FROM = `FROM bookings b
+  JOIN class_sessions s ON s.id = b.class_session_id
+  JOIN users u ON u.id = b.user_id
+  JOIN memberships m ON m.id = b.membership_id`;
+
+/**
  * Every booking holding a place in the same Monday to Friday week as
  * listSessionsForWeek, for the bookings board. Cancellations are left out: they
  * hold no place, so there is nothing on the board to show or drag. Ordered by
  * when the member booked, so names keep a stable order inside a class.
- *
- * unpaid is the paying membership reading as Unpaid through membershipState(),
- * the same definition the memberships grid uses.
  */
 export async function listWeekBookings(
   weekStart: string,
   runner: Queryable = db(),
 ): Promise<WeekBooking[]> {
   const { rows } = await runner.query<WeekBooking>(
-    `SELECT b.id, b.class_session_id AS session_id, b.user_id,
-            u.first_name || ' ' || u.last_name AS member_name,
-            b.status,
-            (${membershipState("m")}) = 'unpaid' AS unpaid
-     FROM bookings b
-     JOIN class_sessions s ON s.id = b.class_session_id
-     JOIN users u ON u.id = b.user_id
-     JOIN memberships m ON m.id = b.membership_id
+    `SELECT ${BOOKING_COLUMNS}
+     ${BOOKING_FROM}
      WHERE s.starts_at >= $1::date
        AND s.starts_at < $1::date + $2::int
        AND b.status IN ${HOLDS_A_PLACE}
      ORDER BY b.booked_at, b.id`,
     [weekStart, TRAINING_DAYS],
+  );
+  return rows;
+}
+
+/**
+ * The one class the check-in page shows, in the order the board lists it, so
+ * the roll call reads down the same names in the same places.
+ */
+export async function listSessionBookings(
+  sessionId: string,
+): Promise<WeekBooking[]> {
+  const { rows } = await db().query<WeekBooking>(
+    `SELECT ${BOOKING_COLUMNS}
+     ${BOOKING_FROM}
+     WHERE b.class_session_id = $1 AND b.status IN ${HOLDS_A_PLACE}
+     ORDER BY b.booked_at, b.id`,
+    [sessionId],
   );
   return rows;
 }

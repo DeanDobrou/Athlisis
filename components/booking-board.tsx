@@ -13,7 +13,8 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Plus } from "lucide-react";
+import { Check, ClipboardCheck, Plus } from "lucide-react";
+import Link from "next/link";
 import {
   Fragment,
   startTransition,
@@ -29,7 +30,7 @@ import {
 } from "@/app/actions/bookings";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "@/components/toaster";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -42,7 +43,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { ClassSession, WeekBooking } from "@/lib/class-sessions";
 import { formatDate, weekdayName } from "@/lib/gym-time";
 import { SLOTS } from "@/lib/slots";
-import { cn } from "@/lib/utils";
+import { attempt, cn } from "@/lib/utils";
 
 type Member = { id: string; name: string };
 
@@ -122,7 +123,7 @@ export function BookingBoard({
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 8 },
+      activationConstraint: { delay: 150, tolerance: 8 },
     }),
   );
 
@@ -166,7 +167,9 @@ export function BookingBoard({
   function send(booking: WeekBooking, target: ClassSession, back?: ClassSession) {
     startTransition(async () => {
       applyChange({ type: "move", bookingId: booking.id, to: target.id });
-      const result = await moveBookingAction(booking.id, target.id);
+      const result = await attempt(() =>
+        moveBookingAction(booking.id, target.id),
+      );
       if ("error" in result) {
         toast.error(result.error);
         return;
@@ -181,7 +184,7 @@ export function BookingBoard({
   function cancel(booking: WeekBooking) {
     startTransition(async () => {
       applyChange({ type: "remove", bookingId: booking.id });
-      const result = await cancelBookingAction(booking.id);
+      const result = await attempt(() => cancelBookingAction(booking.id));
       if ("error" in result) toast.error(result.error);
       else toast.info(`Η κράτηση για ${booking.member_name} ακυρώθηκε.`);
     });
@@ -190,7 +193,9 @@ export function BookingBoard({
   function add(member: Member, target: ClassSession) {
     setAddingTo(null);
     startTransition(async () => {
-      const result = await bookMemberAction(member.id, target.id);
+      const result = await attempt(() =>
+        bookMemberAction(member.id, target.id),
+      );
       if ("error" in result) toast.error(result.error);
       else toast.info(result.notice ?? `${member.name}: ${label(target)}`);
     });
@@ -252,7 +257,7 @@ export function BookingBoard({
               >
                 {weekdayName(day)}{" "}
                 <span className="text-muted-foreground font-normal">
-                  {formatDate(day).slice(0, 5)}
+                  {formatDate(day)}
                 </span>
               </div>
             ))}
@@ -407,19 +412,30 @@ function ClassCell({
         ))}
       </ul>
 
-      {!cancelled && count < cls.capacity && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="mt-1 self-start"
-          onClick={onAdd}
-          aria-label={`Προσθήκη μέλους, ${label(cls)}`}
-          title="Προσθήκη μέλους"
-        >
-          <Plus />
-        </Button>
-      )}
+      <div className="mt-1 flex items-center gap-1">
+        {!cancelled && count < cls.capacity && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onAdd}
+            aria-label={`Προσθήκη μέλους, ${label(cls)}`}
+            title="Προσθήκη μέλους"
+          >
+            <Plus />
+          </Button>
+        )}
+        {count > 0 && (
+          <Link
+            href={`/bookings/${cls.id}`}
+            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            aria-label={`Παρουσίες, ${label(cls)}`}
+            title="Παρουσίες"
+          >
+            <ClipboardCheck />
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
@@ -482,7 +498,14 @@ function ChipLabel({ booking }: { booking: WeekBooking }) {
         </>
       )}
       {booking.status === "checked_in" && (
-        <span className="text-muted-foreground ml-auto">Check-in</span>
+        <span
+          className="ml-auto shrink-0 text-emerald-600 dark:text-emerald-400"
+          title="Έγινε check-in"
+        >
+          <Check className="size-3.5 md:hidden" aria-hidden="true" />
+          <span className="hidden md:inline">Check-in</span>
+          <span className="sr-only md:hidden">Έγινε check-in</span>
+        </span>
       )}
     </>
   );

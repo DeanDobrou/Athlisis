@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
+import { attempt } from "@/lib/utils";
 
 /**
  * Deletes one record after asking. `action` is a server action with the record
@@ -27,7 +28,7 @@ export function DeleteButton({
 
   function remove() {
     startTransition(async () => {
-      const result = await action();
+      const result = await attempt(action);
       if (result) toast.error(result.error);
     });
   }
