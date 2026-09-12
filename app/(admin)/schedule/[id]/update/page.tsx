@@ -4,6 +4,7 @@ import { updateSession } from "@/app/actions/class-sessions";
 import { SessionForm } from "@/components/session-form";
 import { getSession } from "@/lib/class-sessions";
 import { listClassTypes } from "@/lib/class-types";
+import { formatDate } from "@/lib/gym-time";
 import { requireAdmin } from "@/lib/session";
 
 export default async function UpdateSessionPage({
@@ -23,7 +24,7 @@ export default async function UpdateSessionPage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">
-        {session.day} at {session.start_time}
+        {formatDate(session.day)} στις {session.start_time}
       </h1>
       <SessionForm
         action={updateSession}

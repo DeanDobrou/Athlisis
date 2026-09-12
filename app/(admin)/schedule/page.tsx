@@ -18,6 +18,7 @@ import {
 import { listSessionsForWeek, type ClassSession } from "@/lib/class-sessions";
 import {
   addDays,
+  formatDate,
   scheduleWeekStart,
   todayInGym,
   TRAINING_DAYS,
@@ -113,9 +114,8 @@ export default async function SchedulePage({
               )}
             >
               <CardHeader>
-                {/* day.slice(5) is MM-DD out of YYYY-MM-DD. */}
                 <CardTitle>
-                  {weekdayName(day)} - {day.slice(5).replace("-", "/")}
+                  {weekdayName(day)} - {formatDate(day)}
                 </CardTitle>
                 {isToday && (
                   <CardAction className="text-primary text-xs font-medium">
@@ -152,7 +152,7 @@ export default async function SchedulePage({
                           <div className="flex shrink-0 items-start gap-1">
                             <CopySessionButton
                               sessionId={s.id}
-                              label={`το μάθημα ${s.start_time} στις ${day}`}
+                              label={`το μάθημα ${s.start_time} στις ${formatDate(day)}`}
                             />
                             <Link
                               href={`/schedule/${s.id}/update`}
@@ -160,7 +160,7 @@ export default async function SchedulePage({
                                 variant: "ghost",
                                 size: "icon-sm",
                               })}
-                              aria-label={`Επεξεργασία του μαθήματος ${s.start_time} στις ${day}`}
+                              aria-label={`Επεξεργασία του μαθήματος ${s.start_time} στις ${formatDate(day)}`}
                               title="Επεξεργασία"
                             >
                               <Pencil />
@@ -168,7 +168,7 @@ export default async function SchedulePage({
                             <DeleteButton
                               action={deleteSession.bind(null, s.id, monday)}
                               iconOnly
-                              label={`το μάθημα ${s.start_time} στις ${day}`}
+                              label={`το μάθημα ${s.start_time} στις ${formatDate(day)}`}
                             />
                           </div>
                         </div>
