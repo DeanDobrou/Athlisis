@@ -90,47 +90,53 @@ while only staff book, from the web, so it lands with member self-booking (§8).
 | 1 | `users` | members and admins (role enum) |
 | 2 | `plans` | membership products; `one_time` + `visits` = visit pack |
 | 3 | `memberships` | user ↔ plan *and* the money for that period (§8); several per user |
-| 4 | `class_types` | WOD, Open Gym, Foundations (seeded) |
+| 4 | `class_types` | training modalities such as Metcon and Engine (seeded) |
 | 5 | `class_sessions` | a concrete class on the calendar |
-| 6 | `bookings` | user ↔ session, status lifecycle + the membership that paid |
-| 7 | `wods` | programmed workout for a date; `published_at` = draft/live |
+| 6 | `class_session_types` | which modalities a class is; one class can be several |
+| 7 | `bookings` | user ↔ session, status lifecycle + the membership that paid |
+| 8 | `wods` | programmed workout for a date; `published_at` = draft/live |
 
 Still to land: `settings` (one row, with member self-booking) and `closures`
 (§8).
 
-`002_drop_banned_status.sql` removed `banned` from `user_status`: a member
-either has access or does not, so `active` / `inactive` covers it. Postgres has
-no `ALTER TYPE ... DROP VALUE`, so that migration rebuilds the enum and
-re-points the column - the pattern to copy if another enum ever loses a value.
+**One file is the schema.** `001_init_schema.sql` was squashed on 14 September
+2026 from the sixteen migrations that built it, so a fresh database runs one
+readable file instead of replaying a history. A database that already ran them
+has `001_init_schema.sql` in its ledger under the same name, so it skips the
+new file and applies only what comes after. The old files, and why each change
+was made, are in git history. Two lessons from them are worth keeping:
 
-`003_unique_lower_email.sql` made email uniqueness case-insensitive.
-`004_drop_emergency_contact.sql` dropped `users.emergency_contact`: the member
-form no longer collects it and nothing read it.
+- **Removing an enum value means rebuilding the type.** Postgres has no
+  `ALTER TYPE ... DROP VALUE`, so `user_status` lost `banned`, and
+  `membership_status` lost three values, by renaming the old type, creating the
+  new one, re-pointing the column and dropping the old type.
+- **There is no `payments` table.** It was folded into `memberships`, which
+  carries `amount_cents`, `method`, `paid_on` and `recorded_by`. The two were
+  strictly 1:1 and modelling them apart let them disagree: within a day of use
+  the live data already held a payment attached to no period and a period with
+  no payment, so "has this member paid?" had no single answer. With the money
+  on the row, no row means no payment and no coverage, by construction.
 
-`012_fold_payments_into_memberships.sql` **deleted the `payments` table** and
-moved `amount_cents`, `method`, `paid_on` and `recorded_by` onto `memberships`.
-The two were strictly 1:1 and modelling them apart let them disagree: within a
-day of use the live data already held a payment attached to no period and a
-period with no payment, so "has this member paid?" had no single answer. With
-the money on the row, no row means no payment and no coverage, by construction.
-`payment_status` went with it - cash is taken or it is not.
+**A database that never reached the last old migration cannot take the
+squash.** Its ledger already has `001_init_schema.sql`, so it would skip
+everything the squash added. `002` fails there on the foreign key it drops,
+and because deploys migrate at boot the app stops rather than running on a
+wrong schema. Deploy the commit before the squash first, then this one.
 
-`013_membership_paid_on_nullable.sql` let `paid_on` be NULL again. `012` had
-assumed every membership was typed in by staff with cash in hand; §8's unpaid
-membership is written before the money exists. NULL is the promise to pay.
+After the squash:
 
-`014_unpaid_membership_owes_something.sql` added
-`CHECK (paid_on IS NOT NULL OR amount_cents > 0)`: zero stays a legitimate
-price for a comp or a trial, but only once the money question is settled.
-
-`015_unaccent_for_greek_search.sql` installed `unaccent` so member search
-matches Greek names typed without accents; `greekFold()` in `lib/db.ts` adds
-the final-sigma fold that `unaccent` does not do.
-
-`016_booking_records_its_membership.sql` added `bookings.membership_id`,
-`NOT NULL`, the first foreign key onto `memberships`. It replaces the
-`entitlement_source` column this spec used to describe, which no migration
-ever created: see the bullet below.
+- `002_booking_membership_belongs_to_member.sql` replaced the single foreign
+  key from `bookings.membership_id` with a composite one,
+  `(membership_id, user_id)` onto `memberships (id, user_id)`. The update form
+  could move a membership to another member while its bookings still pointed
+  at it, and cancelling one then returned the visit to someone else's pack. A
+  membership with bookings now cannot change hands; one with none still can,
+  which is how picking the wrong member gets fixed.
+- `003_demo_admin.sql` adds the admin `demo@admin.com`, so a fresh database
+  has someone who can log in (§10).
+- `004_monthly_plan_unlimited.sql` removes the visit limit from the 60 euro
+  monthly plan and from the memberships still running on it. The only limit
+  left is one class a day.
 
 **Deferred to post-MVP: `wod_scores`.** Scores, the leaderboard and benchmarks
 are out of the MVP, so the table was dropped rather than left empty. The design
@@ -152,7 +158,7 @@ work is not lost - see "Scores, when they return" below.
   way to say the same thing would only be free to disagree with the first.
   `NOT NULL`, because every booking is covered by a membership, paid or owed
   (§8). This spec once described a `bookings.entitlement_source` column
-  instead; no migration ever created it, and `016` added this in its place.
+  instead; no migration ever created it, and `membership_id` took its place.
 - **Capacity is not a DB constraint** - it is a count across rows. The booking
   transaction must `SELECT ... FOR UPDATE` the session row, or concurrent
   requests will oversell the class. Entitlement resolution happens in that
@@ -294,18 +300,31 @@ the plan rather than writing NULL, which would silently mean unlimited.
 container defaults to UTC and Greece is UTC+3 in summer, so between midnight
 and 03:00 local `current_date` was still yesterday: for three hours every night
 a membership that had ended still read Active, and one starting that morning
-read Scheduled. Migration `009` pins the timezone on the database itself, so it
+read Scheduled. `001_init_schema.sql` pins the timezone on the database itself, so it
 survives a container rebuild and applies to `psql` and the app alike;
 `docker-compose.yml` sets `TZ`/`PGTZ` to match on a fresh container. On the
 app side `todayInGym()` in `lib/gym-time.ts` asks for the date in an explicit
 zone, which also stops a server-rendered date default disagreeing with its
 browser hydration when the two machines sit in different zones.
 
-Both ends are inclusive, so a renewal starting on the exact end date would
-share that one day. Renewals are recorded by hand whenever the member next
-pays, which is rarely the day the last period ended, so periods in practice
-have gaps rather than overlaps and the boundary is not worth engineering
-around. Revisit if renewal is ever automated.
+**Two periods of one member may not overlap.** Without a rule, staff could
+record 8 September to 8 October and then 9 September to 9 October, selling the
+same weeks twice. `findOverlap()` in `lib/memberships.ts` refuses it, for the
+membership form and for the booking that creates a period on a promise alike,
+and names the period in the way. Only periods take part - a dated month or
+year, or an unlimited pass with no end - so a visit pack can still sit beside
+anything. Only a period the member can still use blocks: a member who spends
+all twelve visits by the 20th starts the next month then, and that is a
+renewal, not a mistake. Both ends of a period are inclusive and the check
+compares them end-exclusive, so a renewal may start on the day the last one
+ends and share that one day, but no more.
+
+It is not an exclusion constraint, because it reads `visits_remaining`: a
+cancellation hands a visit back to the old period, and a constraint would then
+fail the cancellation. It runs under the member lock instead, like every other
+per-member rule. The update form checks only a change to the period itself -
+member, plan, start or status - so recording the money on a row never trips
+it.
 
 **The grid shows a derived state, not the stored status.** One column,
 computed on every read by `membershipState()`, from the same three columns plus
@@ -315,7 +334,7 @@ coverage check - see "The badge is not a coverage check" below. Nothing writes
 it, so there is no nightly job to run and nothing to go stale - a membership
 reads as Completed the morning after its period ends, on its own.
 
-**`membership_status` is `active` / `inactive` only** (migration `007`).
+**`membership_status` is `active` / `inactive` only.**
 `on_hold`, `past_due` and `expired` were all read as "not active" by the rule
 above, which made them labels rather than behaviour - `past_due` now falls out
 of `ends_on` being in the past. Stripe subscription states can be added back
@@ -341,6 +360,13 @@ from it like any other, and cancelling gives the visit back to a pack that is
 still owed for. Only a `booked` booking can be cancelled; one that was checked
 in or missed has already happened.
 
+When that leaves an unpaid membership with nothing booked on it - the one
+booking made on a promise, cancelled - the membership still blocks every
+booking the member tries. `cancelBooking` reports what is owed on it, and the
+board's toast says so and points to Συνδρομές to void it if it will not be
+paid. It is not voided automatically: staff may have typed that row in, and
+whether it is still owed is a person's call.
+
 ### How booking is enforced
 
 All of it lives in `lib/bookings.ts` - `bookMember`, `cancelBooking`,
@@ -362,8 +388,11 @@ The class row is locked as well, because capacity is a count across rows.
 
 **The checks run in this order:** the member exists and is active; the class
 exists and is not cancelled; the member is not already booked on it; the
-member does not owe money; no other class that day; the class is not full;
-then entitlement.
+member does not owe money, unless a paid membership covers the day; no other
+class that day; the class is not full; then entitlement. Paid coverage is
+looked up before the debt gate, not after it. The other way round, click order
+decided whether a paid month could still be used: booking a day past the month
+created an unpaid one, which then refused a day still inside it.
 
 **A full class is refused, not waitlisted.** A waitlist needs promotion, and
 promotion has to re-run every rule above for someone who may have started
@@ -376,7 +405,18 @@ member self-booking. Until then a staff cancellation always returns the visit.
 
 **A class with bookings cannot be deleted.** The bookings foreign key refuses,
 which is the point - deleting it would take attendance history with it - and
-the action says to set the class to cancelled instead.
+the action says to cancel the class instead. Delete lives on the class's edit
+page, away from the everyday buttons on the schedule.
+
+**Cancelling a class gives back what its bookings spent.** The gym called it
+off, not the members. `cancelSession` in `lib/bookings.ts` cancels every
+booking not yet attended through `cancelBooking`, so each visit returns to the
+membership that paid, and voids an unpaid membership whose only live booking
+was this class, since that promise was for this class alone. A checked-in
+booking stays: that member trained. Cancelling is a button on the schedule that
+asks first, not a status on the class form, because a save should never cancel
+a class's bookings without a word. A cancelled class shows a restore button in
+its place, which brings the class back but none of its bookings.
 
 **A move updates the booking; it does not cancel and rebook.** `moveBooking`
 changes only which class the booking is on: the membership that paid and the
@@ -405,20 +445,25 @@ out, that they may book this one, and that they will pay when they arrive. On
 confirm, one transaction writes two rows: a new membership on the plan they
 last held, priced from that plan with `paid_on` left NULL, and the booking,
 consuming one visit from it. The membership starts on the class's own day, so
-it always covers the class it was made for, however far ahead that is.
+it always covers the class it was made for, however far ahead that is. If
+that period would overlap one the member already holds and can still use -
+next month, paid in advance, starting after this class - the booking is
+refused and names it, rather than selling the same weeks twice (see "Two
+periods of one member may not overlap" above).
 
 **One rule guards it: a member with an unpaid membership cannot book again.**
 Not a visit count, not a calendar - the debt itself is the gate. The pack keeps
 its full remaining visits and they simply cannot be spent until the money
 arrives. When staff record the payment, everything left on it unlocks at once.
+The one exception is a day a paid membership still covers: spending a period
+already paid for is not a second promise, so a member who owes for October can
+still book the last days of a paid September.
 
 **`paid_on` is the whole mechanism.** `amount_cents` is what the period costs;
 `paid_on` is when it was collected, and NULL means not yet. `membershipState()`
 reads the two together and returns `unpaid`, so nothing has to be written when
 the cash arrives beyond the date itself - no status to flip, nothing to go
-stale, no nightly job. Migration `013` made the column nullable for exactly
-this; `012` had assumed every membership was typed in by staff with cash in
-hand.
+stale, no nightly job. The column is nullable for exactly this.
 
 **`coversDate()` deliberately ignores `paid_on`.** An unpaid period *is*
 coverage: the member may train on the promise. What they may not do is make a
@@ -459,17 +504,22 @@ lock, and deletes only bookings that were not checked in. If a check-in commits
 in the narrow gap, that booking survives and the membership delete fails on the
 bookings foreign key, which the action reports instead of losing the check-in.
 
-**A zero-priced plan is created paid, never unpaid.** There is nothing to
-collect, so `paid_on` is set at creation. Migration `014` enforces it -
+**A zero-priced plan is never created by booking.** With no coverage the
+booking copies the plan last held, and on a free plan there is no promise to
+make: nothing is collected at the door. Copying it also quietly undid the
+owner. A 'Friends of the gym' pass set to inactive, the pause this spec
+recommends, came back paid, active and open-ended the next time staff added
+the friend to a class, under a toast saying an unpaid membership had been
+created. So `bookMember` refuses, and staff recreate a free membership on the
+memberships screen on purpose. `memberships_unpaid_owes_something` still stands for that screen -
 `CHECK (paid_on IS NOT NULL OR amount_cents > 0)` - because a row owing zero
-that nobody has paid is not a state worth being able to write. This is not a
-hypothetical branch: the gym already sells 'Friends of the gym' at 0 cents.
+that nobody has paid is not a state worth being able to write.
 
 **`recorded_by` exists exactly when `paid_on` does.** It means the admin who
 took the money, so an unpaid row has none, and whoever settles it later gets
 stamped then. Clearing the date takes the recorder with it. One `CASE` says so
 in both the insert and the update rather than two rules drifting apart. (Not a
-database constraint: `012` backfilled `paid_on` for periods with no payment
+database constraint: folding `payments` into `memberships` backfilled `paid_on` for periods with no payment
 row, so one live row has a date and no recorder, and enforcing the pairing
 would mean inventing a recorder for cash nobody recorded.)
 
@@ -493,11 +543,11 @@ created. It was dropped for three reasons:
 - **It needed machinery.** A `settings` key for the allowance, a join from
   `bookings` to `class_sessions` inside the booking transaction just to work
   out which month a class fell in, and somewhere to record the settling cash
-  once `payments` was folded into `memberships` by `012`.
+  once `payments` was folded into `memberships`.
 
 The replacement needs none of that: one nullable column, already there. Every
-booking is covered by a membership, paid or owed, and `016` records which one
-on the booking itself, as `membership_id`.
+booking is covered by a membership, paid or owed, and the booking itself
+records which one, as `membership_id`.
 
 Note the rule cannot be a database constraint either way: it spans memberships
 and bookings and needs the transaction that capacity already requires. Service
@@ -746,10 +796,14 @@ sign-up, no invite-accept flow. The only route into the database is an admin
 creating the account. The app has exactly one unauthenticated screen: the
 login form.
 
-- **Admins** are created directly by the gym owner as a database row - no UI,
-  no seeding script. `node lib/password.ts "the password"` prints a hash to
-  paste into `users.password_hash`. There is no "promote to admin" button in
-  the MVP: two roles and a handful of admins do not justify one.
+- **Admins** are created directly as a database row - no UI.
+  `003_demo_admin.sql` seeds one, `demo@admin.com`, so a fresh database can be
+  logged into. Only its scrypt hash is in the repo, but migrations run on every
+  deploy, so it exists in production too: change its password there on the
+  member update form before real data goes in. Any other admin is a row the
+  owner inserts; `node lib/password.ts "the password"` prints a hash to paste
+  into `users.password_hash`. There is no "promote to admin" button in the
+  MVP: two roles and a handful of admins do not justify one.
 - **Members** are created by an admin on the members screen. The create form
   generates a random password and carries a **Send welcome email** checkbox.
   When it is ticked the member receives an email containing their email
@@ -810,16 +864,10 @@ members screen ships.
 
 | File | Role | Status |
 |---|---|---|
-| `db/migrations/001_init_schema.sql` | the schema, 8 tables | applied |
-| `db/migrations/002_drop_banned_status.sql` | `user_status` loses `banned` | applied |
-| `db/migrations/003_unique_lower_email.sql` | case-insensitive email uniqueness | applied |
-| `db/migrations/004_drop_emergency_contact.sql` | drops `users.emergency_contact` | applied |
-| `db/migrations/005-011_*.sql` | plan, membership and schedule refinements | applied |
-| `db/migrations/012_fold_payments_into_memberships.sql` | drops `payments`; money moves onto `memberships` | applied |
-| `db/migrations/013_membership_paid_on_nullable.sql` | `paid_on` NULL = owed, not paid (§8) | applied |
-| `db/migrations/014_unpaid_membership_owes_something.sql` | an unpaid period must owe something | applied |
-| `db/migrations/015_unaccent_for_greek_search.sql` | `unaccent` for Greek-name search | applied |
-| `db/migrations/016_booking_records_its_membership.sql` | `bookings.membership_id`, the membership that paid | applied |
+| `db/migrations/001_init_schema.sql` | the whole schema, 8 tables, squashed from the first sixteen migrations | applied |
+| `db/migrations/002_booking_membership_belongs_to_member.sql` | a booking's membership is the booking member's own | applied |
+| `db/migrations/003_demo_admin.sql` | the admin `demo@admin.com` | applied |
+| `db/migrations/004_monthly_plan_unlimited.sql` | the 60 euro monthly plan has no visit limit | applied |
 | `lib/db.ts` | single pool, `withTransaction`, `greekFold()` | done |
 | `lib/bookings.ts` | booking rules: book, cancel, move, check in, void an unpaid membership (§8) | done |
 | `scripts/check-bookings.mts` | `npm run check:bookings`: every booking rule against the real database, rolled back | done |
@@ -829,6 +877,7 @@ members screen ships.
 | `components/session-check-in.tsx` | the roll call: tick, all-present, Save and Πίσω | done |
 | `app/actions/bookings.ts` | book, cancel, move, and save a class's check-ins | done |
 | `components/week-picker.tsx` | week jumper shared by both week pages (`basePath`) | done |
+| `components/session-status-button.tsx` | cancel a class after asking, or restore a cancelled one | done |
 | `scripts/migrate.mjs` | migration runner (`--dry-run`) | done |
 | `app/api/health/route.ts` | connectivity smoke test | done |
 | `app/page.tsx` | redirects to `/dashboard` | done |
