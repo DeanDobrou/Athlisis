@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { cancelSession } from "@/lib/bookings";
 import { db, hasPgCode, withTransaction } from "@/lib/db";
 import {
   addDays,
@@ -23,7 +24,6 @@ type ParsedSession = {
   startTime: string;
   endTime: string;
   capacity: number;
-  status: string;
   notes: string | null;
   typeIds: number[];
 };
@@ -35,15 +35,10 @@ function parseFields(
 
   const day = get("day");
   if (!isRealDate(day)) return { field: "day", error: "Διάλεξε ημερομηνία." };
-  // The calendar already greys these out, but a server action is its own
-  // entry point and cannot rely on the form having done it.
   if (isWeekend(day)) {
     return { field: "day", error: "Το γυμναστήριο δεν έχει μαθήματα το Σαββατοκύριακο." };
   }
 
-  // Any real time is accepted, not only one of SLOTS. The slot buttons are the
-  // everyday path, but if the gym moves its times the schedule has to stay
-  // usable until a new slot list ships.
   const startTime = get("start_time");
   const endTime = get("end_time");
   if (!HH_MM.test(startTime)) {
@@ -52,7 +47,6 @@ function parseFields(
   if (!HH_MM.test(endTime)) {
     return { field: "end_time", error: "Δώσε την ώρα σε μορφή HH:MM." };
   }
-  // String comparison is safe: both are zero-padded 24-hour times.
   if (endTime <= startTime) {
     return { field: "end_time", error: "Το μάθημα πρέπει να τελειώνει μετά την έναρξή του." };
   }
@@ -61,8 +55,6 @@ function parseFields(
   if (!Number.isSafeInteger(capacity) || capacity < 1) {
     return { field: "capacity", error: "Η χωρητικότητα πρέπει να είναι ακέραιος μεγαλύτερος του μηδενός." };
   }
-
-  const status = get("status") === "cancelled" ? "cancelled" : "scheduled";
 
   const typeIds = formData
     .getAll("class_type_ids")
@@ -77,7 +69,6 @@ function parseFields(
     startTime,
     endTime,
     capacity,
-    status,
     notes: get("notes").slice(0, 2000) || null,
     typeIds,
   };
@@ -85,7 +76,7 @@ function parseFields(
 
 /**
  * date + time is assembled in SQL, so the result lands in the gym's timezone
- * (migration 009) rather than whatever zone the app process happens to run in.
+ * (set on the database) rather than whatever zone the app process happens to run in.
  */
 const STARTS_AT = "($1::date + $2::time)";
 const ENDS_AT = "($1::date + $3::time)";
@@ -99,15 +90,13 @@ export async function createSession(
   const f = parseFields(formData);
   if ("error" in f) return f;
 
-  // The session and its types are one thing: a session with no types would be
-  // an untagged blank on the schedule.
   await withTransaction(async (client) => {
     const { rows } = await client.query<{ id: string }>(
       `INSERT INTO class_sessions
          (starts_at, ends_at, capacity, status, notes)
-       VALUES (${STARTS_AT}, ${ENDS_AT}, $4, $5, $6)
+       VALUES (${STARTS_AT}, ${ENDS_AT}, $4, 'scheduled', $5)
        RETURNING id`,
-      [f.day, f.startTime, f.endTime, f.capacity, f.status, f.notes],
+      [f.day, f.startTime, f.endTime, f.capacity, f.notes],
     );
     await client.query(
       `INSERT INTO class_session_types (class_session_id, class_type_id)
@@ -136,14 +125,12 @@ export async function updateSession(
     const { rowCount } = await client.query(
       `UPDATE class_sessions SET
          starts_at = ${STARTS_AT}, ends_at = ${ENDS_AT},
-         capacity = $4, status = $5, notes = $6
-       WHERE id = $7`,
-      [f.day, f.startTime, f.endTime, f.capacity, f.status, f.notes, id],
+         capacity = $4, notes = $5
+       WHERE id = $6`,
+      [f.day, f.startTime, f.endTime, f.capacity, f.notes, id],
     );
     if (rowCount === 0) return false;
 
-    // Replace rather than diff: the set is at most a handful of rows, and
-    // working out which to add and which to drop is more code than it saves.
     await client.query(
       "DELETE FROM class_session_types WHERE class_session_id = $1",
       [id],
@@ -159,6 +146,67 @@ export async function updateSession(
 
   revalidatePath("/schedule");
   redirect(`/schedule?week=${f.day}`);
+}
+
+const count = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Cancels a class and gives back what its bookings spent; the rules are in
+ * cancelSession in lib/bookings.ts. Returns what happened, for a toast, since
+ * staff should see that the members' bookings went with it.
+ */
+export async function cancelSessionAction(
+  rawId: string,
+): Promise<{ error: string } | { notice: string }> {
+  await requireAdmin();
+
+  const id = parseId(rawId);
+  if (id === null) return { error: "Άγνωστο μάθημα." };
+
+  const result = await withTransaction((client) => cancelSession(client, id));
+  if (!result.ok) return { error: result.error };
+
+  // Bookings, visits and unpaid memberships all moved, so every screen that
+  // shows one changes.
+  revalidatePath("/schedule");
+  revalidatePath("/bookings");
+  revalidatePath("/memberships");
+  revalidatePath("/dashboard");
+
+  const total = result.cancelled + result.voided;
+  if (total === 0) return { notice: "Το μάθημα ακυρώθηκε. Δεν είχε κρατήσεις." };
+  const voided =
+    result.voided > 0
+      ? ` Διαγράφηκαν ${count(result.voided, "ανεξόφλητη συνδρομή", "ανεξόφλητες συνδρομές")} που είχαν γίνει μόνο γι' αυτό.`
+      : "";
+  return {
+    notice: `Το μάθημα ακυρώθηκε, μαζί με ${count(total, "κράτηση", "κρατήσεις")}. Οι επισκέψεις επιστράφηκαν.${voided}`,
+  };
+}
+
+/**
+ * Brings a cancelled class back. Only the class: the bookings cancelling it
+ * gave back stay cancelled, and staff book members onto it again.
+ */
+export async function restoreSessionAction(
+  rawId: string,
+): Promise<{ error: string } | undefined> {
+  await requireAdmin();
+
+  const id = parseId(rawId);
+  if (id === null) return { error: "Άγνωστο μάθημα." };
+
+  const { rowCount } = await db().query(
+    "UPDATE class_sessions SET status = 'scheduled' WHERE id = $1",
+    [id],
+  );
+  if (rowCount === 0) return { error: "Άγνωστο μάθημα." };
+
+  revalidatePath("/schedule");
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  return undefined;
 }
 
 /**
@@ -223,8 +271,6 @@ export async function copySession(
     return undefined;
   });
 
-  // After the transaction, not inside it: the cache should only be dropped
-  // once the rows are actually committed.
   if (!result) revalidatePath("/schedule");
   return result;
 }
@@ -327,10 +373,6 @@ export async function deleteSession(
   const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστο μάθημα." };
 
-  // class_session_types cascades. Bookings do not: a class that has any
-  // cannot be deleted, because the bookings foreign key refuses - which is
-  // the point, since deleting it would take attendance history with it.
-  // Setting the class to cancelled keeps the class and its history.
   const deleted = await db()
     .query("DELETE FROM class_sessions WHERE id = $1", [id])
     .catch((err: unknown) => {
@@ -340,7 +382,7 @@ export async function deleteSession(
   if (deleted === null) {
     return {
       error:
-        "Το μάθημα έχει κρατήσεις και δεν μπορεί να διαγραφεί. Άλλαξέ το σε ακυρωμένο.",
+        "Το μάθημα έχει κρατήσεις και δεν μπορεί να διαγραφεί. Ακύρωσέ το από το πρόγραμμα.",
     };
   }
   if (deleted.rowCount === 0) return { error: "Άγνωστο μάθημα." };

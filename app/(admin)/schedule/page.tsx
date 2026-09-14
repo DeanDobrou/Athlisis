@@ -1,10 +1,9 @@
 import { ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 
-import { deleteSession } from "@/app/actions/class-sessions";
 import { CopySessionButton } from "@/components/copy-session-button";
 import { CopyWeekButton } from "@/components/copy-week-button";
-import { DeleteButton } from "@/components/delete-button";
+import { SessionStatusButton } from "@/components/session-status-button";
 import { WeekPicker } from "@/components/week-picker";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -38,10 +37,6 @@ export default async function SchedulePage({
 
   const { week } = await searchParams;
   const today = todayInGym();
-  // An explicit week is snapped to its Monday, so a hand-typed or mid-week
-  // link still lands on a whole week, and a past week stays reachable. With
-  // no week at all the default rolls past a weekend rather than opening on
-  // five days that have already happened.
   const monday =
     week && /^\d{4}-\d{2}-\d{2}$/.test(week)
       ? weekStart(week)
@@ -93,9 +88,6 @@ export default async function SchedulePage({
         {days.map((day) => {
           const dayed = byDay.get(day) ?? [];
           const isToday = day === today;
-          // Adding stays on offer until every slot of the day has a class, and
-          // opens the form on a free one: the evening default if it is free,
-          // else the next after it, the way copying picks.
           const freeSlot = nextFreeSlot(
             new Set(dayed.map((s) => s.start_time)),
             slotIndex(DEFAULT_SLOT.start) - 1,
@@ -104,10 +96,6 @@ export default async function SchedulePage({
             <Card
               key={day}
               size="sm"
-              // Card carries its own ring, so today is a heavier ring rather
-              // than a border. A day with nothing on it is greyed rather than
-              // left blank, so "the gym is shut" reads differently from "this
-              // week is still being built": an empty day is a closed day.
               className={cn(
                 isToday && "ring-2 ring-primary",
                 dayed.length === 0 && "bg-muted/40",
@@ -165,9 +153,9 @@ export default async function SchedulePage({
                             >
                               <Pencil />
                             </Link>
-                            <DeleteButton
-                              action={deleteSession.bind(null, s.id, monday)}
-                              iconOnly
+                            <SessionStatusButton
+                              sessionId={s.id}
+                              cancelled={s.status === "cancelled"}
                               label={`το μάθημα ${s.start_time} στις ${formatDate(day)}`}
                             />
                           </div>

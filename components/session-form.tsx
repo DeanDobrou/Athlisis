@@ -10,13 +10,17 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import type { ClassSession } from "@/lib/class-sessions";
 import type { ClassType } from "@/lib/class-types";
 import { DEFAULT_SLOT, findSlot, SLOTS, type Slot } from "@/lib/slots";
 import { guarded } from "@/lib/utils";
 
+/**
+ * No status field: cancelling a class cancels its bookings too, so it is its
+ * own button on the schedule, which asks first, rather than a radio a save
+ * could flip without a word.
+ */
 export function SessionForm({
   action,
   classTypes,
@@ -33,11 +37,7 @@ export function SessionForm({
   classTypes: ClassType[];
   session?: ClassSession;
   defaultDay: string;
-  // Passed in rather than imported: the constant lives in a server-only
-  // module, and when it becomes a settings row the server will read it and
-  // this component will not change.
   defaultCapacity: number;
-  /** Where a new class starts; the schedule passes the day's first free slot. */
   defaultSlot?: Slot;
   submitLabel: string;
 }) {
@@ -46,10 +46,6 @@ export function SessionForm({
     undefined,
   );
 
-  // Controlled so a slot button can set both at once. The slots are the
-  // everyday path; the inputs below stay as the escape hatch, so if the gym
-  // moves to 17:00-18:00 the schedule keeps working until the new slot list
-  // is deployed.
   const [start, setStart] = useState(session?.start_time ?? defaultSlot.start);
   const [end, setEnd] = useState(session?.end_time ?? defaultSlot.end);
 
@@ -68,8 +64,6 @@ export function SessionForm({
         name="day"
         label="Ημερομηνία"
         defaultValue={session?.day ?? defaultDay}
-        // The gym trains Monday to Friday, and the schedule only has columns
-        // for those, so a weekend class would save and then be invisible.
         disabled={{ dayOfWeek: [0, 6] }}
       />
 
@@ -167,24 +161,6 @@ export function SessionForm({
           strength and Metcon.
         </p>
       </FormField>
-
-      <div className="grid gap-2">
-        <span className="text-sm font-medium">Κατάσταση</span>
-        <RadioGroup
-          name="status"
-          defaultValue={session?.status ?? "scheduled"}
-          className="gap-3"
-        >
-          <Label htmlFor="status_scheduled" className="flex items-center gap-2">
-            <RadioGroupItem id="status_scheduled" value="scheduled" />
-            Προγραμματισμένο
-          </Label>
-          <Label htmlFor="status_cancelled" className="flex items-center gap-2">
-            <RadioGroupItem id="status_cancelled" value="cancelled" />
-            Ακυρωμένο
-          </Label>
-        </RadioGroup>
-      </div>
 
       <div className="grid gap-2">
         <Label htmlFor="notes">Σημειώσεις</Label>
