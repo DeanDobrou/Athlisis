@@ -11,6 +11,7 @@ import {
   LogOut,
   Shapes,
   Tags,
+  UserRound,
   Users,
 } from "lucide-react";
 
@@ -110,6 +111,15 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<Link href="/profile" onClick={closeOnPhone} />}
+              isActive={pathname === "/profile"}
+            >
+              <UserRound />
+              <span>Προφίλ</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <form action={logout}>
               <SidebarMenuButton type="submit" className="w-full">

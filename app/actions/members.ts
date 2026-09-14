@@ -91,6 +91,57 @@ export async function createMember(
   redirect(`/members/${memberId}`);
 }
 
+/**
+ * The write both update forms share. A blank password leaves the current one
+ * alone. `access` is null for the profile, which keeps role and status exactly
+ * as they are.
+ */
+async function saveUser(
+  id: number,
+  f: Fields,
+  formData: FormData,
+  access: { role: string; status: string } | null,
+): Promise<MemberFormState> {
+  const password = String(formData.get("password") ?? "");
+  if (password && password.length < MIN_PASSWORD_LENGTH) {
+    return {
+      field: "password",
+      error: `Ο νέος κωδικός πρέπει να έχει τουλάχιστον ${MIN_PASSWORD_LENGTH} χαρακτήρες.`,
+    };
+  }
+  const passwordHash = password ? await hashPassword(password) : null;
+
+  try {
+    const { rowCount } = await db().query(
+      `UPDATE users SET
+         email = $1, first_name = $2, last_name = $3, phone = $4,
+         date_of_birth = $5,
+         role = COALESCE($6::user_role, role),
+         status = COALESCE($7::user_status, status),
+         password_hash = COALESCE($8, password_hash)
+       WHERE id = $9`,
+      [
+        f.email,
+        f.firstName,
+        f.lastName,
+        f.phone,
+        f.dateOfBirth,
+        access?.role ?? null,
+        access?.status ?? null,
+        passwordHash,
+        id,
+      ],
+    );
+    if (rowCount === 0) return { error: "Άγνωστο μέλος." };
+  } catch (err) {
+    if (isDuplicateEmail(err)) {
+      return { field: "email", error: "Αυτό το email χρησιμοποιείται ήδη." };
+    }
+    throw err;
+  }
+  return undefined;
+}
+
 export async function updateMember(
   _prev: MemberFormState,
   formData: FormData,
@@ -111,46 +162,35 @@ export async function updateMember(
     return { error: "Δεν μπορείς να αφαιρέσεις τα δικά σου δικαιώματα διαχειριστή." };
   }
 
-  // Blank means "leave the current password alone".
-  const password = String(formData.get("password") ?? "");
-  if (password && password.length < MIN_PASSWORD_LENGTH) {
-    return {
-      field: "password",
-      error: `Ο νέος κωδικός πρέπει να έχει τουλάχιστον ${MIN_PASSWORD_LENGTH} χαρακτήρες.`,
-    };
-  }
-  const passwordHash = password ? await hashPassword(password) : null;
-
-  try {
-    const { rowCount } = await db().query(
-      `UPDATE users SET
-         email = $1, first_name = $2, last_name = $3, phone = $4, role = $5,
-         date_of_birth = $6, status = $7,
-         password_hash = COALESCE($8, password_hash)
-       WHERE id = $9`,
-      [
-        f.email,
-        f.firstName,
-        f.lastName,
-        f.phone,
-        f.role,
-        f.dateOfBirth,
-        status,
-        passwordHash,
-        id,
-      ],
-    );
-    if (rowCount === 0) return { error: "Άγνωστο μέλος." };
-  } catch (err) {
-    if (isDuplicateEmail(err)) {
-      return { field: "email", error: "Αυτό το email χρησιμοποιείται ήδη." };
-    }
-    throw err;
-  }
+  const refused = await saveUser(id, f, formData, { role: f.role, status });
+  if (refused) return refused;
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
   redirect(`/members/${id}`);
+}
+
+/**
+ * The logged-in admin's own details. The id is the session's, never the
+ * form's, and role and status are left alone, so nobody can promote, demote
+ * or deactivate themselves from here.
+ */
+export async function updateProfile(
+  _prev: MemberFormState,
+  formData: FormData,
+): Promise<MemberFormState> {
+  const admin = await requireAdmin();
+
+  const f = parseFields(formData);
+  const invalid = validate(f);
+  if (invalid) return invalid;
+
+  const refused = await saveUser(admin.userId, f, formData, null);
+  if (refused) return refused;
+
+  revalidatePath("/members");
+  revalidatePath(`/members/${admin.userId}`);
+  redirect("/dashboard");
 }
 
 export async function deleteMember(

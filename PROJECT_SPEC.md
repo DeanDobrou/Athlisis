@@ -800,10 +800,17 @@ login form.
   `003_demo_admin.sql` seeds one, `demo@admin.com`, so a fresh database can be
   logged into. Only its scrypt hash is in the repo, but migrations run on every
   deploy, so it exists in production too: change its password there on the
-  member update form before real data goes in. Any other admin is a row the
+  profile page before real data goes in. Any other admin is a row the
   owner inserts; `node lib/password.ts "the password"` prints a hash to paste
   into `users.password_hash`. There is no "promote to admin" button in the
   MVP: two roles and a handful of admins do not justify one.
+- **Every admin edits their own details on `/profile`**, linked from the
+  sidebar footer: name, email, phone, date of birth and password. The id comes
+  from the session, never the form, and role and status are not on the page,
+  so nobody can promote, demote or deactivate themselves there. It saves
+  through the same write as the member update form. No current password is
+  asked for, because an admin can already set any account's password, their
+  own included, from the members screen.
 - **Members** are created by an admin on the members screen. The create form
   generates a random password and carries a **Send welcome email** checkbox.
   When it is ticked the member receives an email containing their email
@@ -887,9 +894,10 @@ members screen ships.
 | `proxy.ts` | optimistic route guard (Next 16 renamed `middleware`) | done |
 | `app/actions/auth.ts` | `login` / `logout` Server Actions | done |
 | `lib/members.ts` | member queries | done |
-| `app/actions/members.ts` | create / update / delete, with delete guards | done |
+| `app/actions/members.ts` | create / update / delete, with delete guards, and the admin's own profile | done |
 | `app/(admin)/members/*` | list, view, create, update | done |
-| `components/member-form.tsx` | shared create/update form | done |
+| `app/(admin)/profile/page.tsx` | the logged-in admin edits their own details | done |
+| `components/member-form.tsx` | shared create/update form, and the profile form without role or status | done |
 | `components/members-toolbar.tsx` | live filters, reset, add | done |
 | `components/delete-button.tsx` | every delete: asks first, a refusal shows as a toast | done |
 | `components/action-form.tsx` | every create/update form: errors under their field or at the top | done |

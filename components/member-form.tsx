@@ -27,6 +27,7 @@ export function MemberForm({
   action,
   member,
   submitLabel,
+  profile = false,
 }: {
   action: (
     prev: MemberFormState,
@@ -34,6 +35,8 @@ export function MemberForm({
   ) => Promise<MemberFormState>;
   member?: Member;
   submitLabel: string;
+  /** The logged-in admin's own page: no id, role or status, and Cancel goes to the dashboard. */
+  profile?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     guarded(action),
@@ -47,7 +50,9 @@ export function MemberForm({
       action={formAction}
       className="max-w-xl space-y-4"
     >
-      {member && <input type="hidden" name="id" value={member.id} />}
+      {member && !profile && (
+        <input type="hidden" name="id" value={member.id} />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field id="first_name" label="Όνομα">
@@ -106,25 +111,27 @@ export function MemberForm({
         </Field>
       )}
 
-      <div className="grid gap-2">
-        <span className="text-sm font-medium">Ρόλος</span>
-        <RadioGroup
-          name="role"
-          defaultValue={member?.role ?? "member"}
-          className="gap-3"
-        >
-          <Label htmlFor="role_member" className="flex items-center gap-2">
-            <RadioGroupItem id="role_member" value="member" />
-            Μέλος
-          </Label>
-          <Label htmlFor="role_admin" className="flex items-center gap-2">
-            <RadioGroupItem id="role_admin" value="admin" />
-            Διαχειριστής
-          </Label>
-        </RadioGroup>
-      </div>
+      {!profile && (
+        <div className="grid gap-2">
+          <span className="text-sm font-medium">Ρόλος</span>
+          <RadioGroup
+            name="role"
+            defaultValue={member?.role ?? "member"}
+            className="gap-3"
+          >
+            <Label htmlFor="role_member" className="flex items-center gap-2">
+              <RadioGroupItem id="role_member" value="member" />
+              Μέλος
+            </Label>
+            <Label htmlFor="role_admin" className="flex items-center gap-2">
+              <RadioGroupItem id="role_admin" value="admin" />
+              Διαχειριστής
+            </Label>
+          </RadioGroup>
+        </div>
+      )}
 
-      {isUpdate ? (
+      {profile ? null : isUpdate ? (
         <Field id="status" label="Κατάσταση">
           <Select
             name="status"
@@ -160,7 +167,7 @@ export function MemberForm({
           {pending ? "Αποθήκευση..." : submitLabel}
         </Button>
         <Link
-          href="/members"
+          href={profile ? "/dashboard" : "/members"}
           className={buttonVariants({ variant: "outline" })}
         >
           Άκυρο
