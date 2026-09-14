@@ -36,7 +36,7 @@ export function likeLiteral(value: string): string {
  *
  * Two things go wrong comparing Greek literally. Accents: people type "μαρια"
  * for Μαρία, and Greek capitals drop the tonos anyway, so ΜΑΡΙΑ never matches
- * an accented search. unaccent (migration 015) settles that. Final sigma:
+ * an accented search. unaccent (installed in 001_init_schema.sql) settles that. Final sigma:
  * Postgres lowercases Σ to the medial σ, never the final ς, so a name stored
  * in capitals folds to "γιωργοσ" and misses "γιωργος" as it would really be
  * typed. translate settles that.

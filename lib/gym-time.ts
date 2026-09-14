@@ -5,7 +5,7 @@
  * Client-safe on purpose: the forms need it too, and asking for the date in an
  * explicit zone is what keeps a server-rendered default and its browser
  * hydration from disagreeing when the two machines sit in different zones.
- * The database is pinned separately, in migration 009.
+ * The database is pinned separately, in db/migrations/001_init_schema.sql.
  */
 export const GYM_TIMEZONE = "Europe/Athens";
 

@@ -32,7 +32,7 @@ export type ClassSession = {
 };
 
 /**
- * Times are rendered by Postgres in the gym's timezone (migration 009) rather
+ * Times are rendered by Postgres in the gym's timezone (set on the database) rather
  * than shipped as instants and formatted in the browser: the schedule must
  * read the same to everyone, and a server-rendered time that reformats on
  * hydration is a mismatch waiting to happen.
