@@ -907,7 +907,9 @@ members screen ships.
 | `app/login/page.tsx` | login card | done |
 | `app/(admin)/layout.tsx` | sidebar shell; deliberately holds **no** auth check | done |
 | `app/(admin)/dashboard/page.tsx` | calls `requireAdmin()`; otherwise a stub | stub |
-| `components/app-sidebar.tsx` | nav + sign out; links to unbuilt routes | done |
+| `components/app-sidebar.tsx` | nav, profile and sign out; links to unbuilt routes | done |
+| `components/breadcrumbs.tsx` | the trail in the admin header, labelled with the sidebar's titles | done |
+| `lib/breadcrumbs.ts` | turns a URL into crumbs; an id links only where its page exists; self-check with `node lib/breadcrumbs.ts` | done |
 | `components/ui/*` | shadcn/ui primitives | done |
 | `lib/utils.ts` | `cn()` class helper, and `parseId()` for every id taken from a URL or form | done |
 | `db/migrations.ts` | mobile SQLite migrations + runner | not written |

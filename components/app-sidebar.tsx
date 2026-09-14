@@ -35,7 +35,7 @@ import {
 // two setup screens moved to the bottom: they are filled in once and then
 // left, and sitting in the middle they split the two screens that are used
 // together all day. An empty label means the group renders without a heading.
-const nav = [
+export const nav = [
   {
     label: "",
     items: [
