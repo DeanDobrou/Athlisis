@@ -79,10 +79,6 @@ function label(c: ClassSession): string {
  * they were, with the reason in a toast. The rules checked here are only the
  * ones the board can see; lib/bookings.ts decides, including whether the
  * paying membership covers the new day.
- *
- * ponytail: every class is assumed to start on one of SLOTS - the schedule
- * form only offers those, and all current classes do. A class at any other
- * time would have no row; add a row for strays if slots ever stop being fixed.
  */
 export function BookingBoard({
   days,
@@ -108,18 +104,12 @@ export function BookingBoard({
   );
   const [dragging, setDragging] = useState<WeekBooking | null>(null);
   const [addingTo, setAddingTo] = useState<string | null>(null);
-  // Two pieces so the dialog keeps its text while it fades out after closing.
   const [confirming, setConfirming] = useState(false);
   const [toCancel, setToCancel] = useState<WeekBooking | null>(null);
   const isMobile = useIsMobile();
 
-  // A drag that ends on its own chip can still fire a click. This swallows
-  // that one click so finishing a drag never asks to cancel.
   const justDragged = useRef(false);
 
-  // Mouse drags start after a few pixels, so a click stays a click. Touch
-  // drags start after a short press, so a tap stays a tap and a swipe still
-  // scrolls the page.
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, {
@@ -131,7 +121,6 @@ export function BookingBoard({
   const inClass = (classId: string) =>
     shown.filter((b) => b.session_id === classId);
 
-  /** Why this booking cannot go to that class, as far as the board can tell. */
   function refusal(booking: WeekBooking, target: ClassSession): string | null {
     if (target.id === booking.session_id) return null;
     if (target.status === "cancelled") return "Το μάθημα έχει ακυρωθεί.";
@@ -185,8 +174,12 @@ export function BookingBoard({
     startTransition(async () => {
       applyChange({ type: "remove", bookingId: booking.id });
       const result = await attempt(() => cancelBookingAction(booking.id));
-      if ("error" in result) toast.error(result.error);
-      else toast.info(`Η κράτηση για ${booking.member_name} ακυρώθηκε.`);
+      if ("error" in result) {
+        toast.error(result.error);
+      } else {
+        const done = `Η κράτηση για ${booking.member_name} ακυρώθηκε.`;
+        toast.info(result.notice ? `${done} ${result.notice}` : done);
+      }
     });
   }
 
@@ -447,8 +440,6 @@ function MemberChip({
   booking: WeekBooking;
   onTap: () => void;
 }) {
-  // Only a booking that has not happened yet can be moved or cancelled.
-  // Checked-in and no-show stay put: they are attendance, not a plan.
   const active = booking.status === "booked";
   const { setNodeRef, listeners, isDragging } = useDraggable({
     id: booking.id,
@@ -464,8 +455,6 @@ function MemberChip({
       className={cn(isDragging && "opacity-40")}
     >
       {active ? (
-        // A plain button, not a menu trigger: the app's Base UI menus open on
-        // mouse-down, which would fire at the start of every drag.
         <button
           type="button"
           onClick={onTap}

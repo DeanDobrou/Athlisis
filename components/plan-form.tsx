@@ -86,10 +86,6 @@ export function PlanForm({
             </Label>
           ))}
         </RadioGroup>
-        <p className="text-muted-foreground text-xs">
-          Use One time for a visit pack: set the visits and leave it off
-          renewal.
-        </p>
       </FormField>
 
       <div className="flex gap-2 pt-2">

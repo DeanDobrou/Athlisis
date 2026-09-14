@@ -9,24 +9,17 @@ import {
   saveSessionCheckIns,
 } from "@/lib/bookings";
 import { withTransaction } from "@/lib/db";
+import { formatMoney } from "@/lib/money";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
-/**
- * What the bookings board gets back. These are called directly by the board,
- * not through forms, and never throw on a refusal: the board puts a moved or
- * cancelled member back where they were and shows the reason.
- */
 export type BoardResult = { ok: true; notice?: string } | { error: string };
-
-// The rules themselves are all in lib/bookings.ts; these only parse input,
-// check the caller is an admin, and pick what to refresh.
 
 export async function bookMemberAction(
   userId: string,
   sessionId: string,
 ): Promise<BoardResult> {
-  const admin = await requireAdmin();
+  await requireAdmin();
 
   const member = parseId(userId);
   if (member === null) return { error: "Διάλεξε μέλος." };
@@ -34,12 +27,10 @@ export async function bookMemberAction(
   if (session === null) return { error: "Άγνωστο μάθημα." };
 
   const result = await withTransaction((client) =>
-    bookMember(client, member, session, admin.userId),
+    bookMember(client, member, session),
   );
   if (!result.ok) return { error: result.error };
 
-  // A booking spends a visit or creates a membership, so the ledger and the
-  // member's page change along with the board.
   revalidatePath("/bookings");
   revalidatePath("/memberships");
   revalidatePath(`/members/${member}`);
@@ -64,10 +55,15 @@ export async function cancelBookingAction(
   const result = await withTransaction((client) => cancelBooking(client, id));
   if (!result.ok) return { error: result.error };
 
-  // Cancelling returns a visit, so the ledger changes too.
   revalidatePath("/bookings");
   revalidatePath("/memberships");
-  return { ok: true };
+
+  return result.unpaidLeftCents === null
+    ? { ok: true }
+    : {
+        ok: true,
+        notice: `Η συνδρομή που την πλήρωνε είναι ανεξόφλητη (${formatMoney(result.unpaidLeftCents)}) και δεν έχει πια κρατήσεις, αλλά μπλοκάρει κάθε νέα κράτηση του μέλους. Αν δεν θα πληρωθεί, διάγραψέ τη από τις Συνδρομές.`,
+      };
 }
 
 /**
@@ -94,8 +90,6 @@ export async function saveCheckInsAction(
     saveSessionCheckIns(client, session, present),
   );
 
-  // Attendance moves no money and no visit, so only the two screens that show
-  // it change.
   revalidatePath("/bookings");
   revalidatePath(`/bookings/${session}`);
 
@@ -125,7 +119,6 @@ export async function moveBookingAction(
   );
   if (!result.ok) return { error: result.error };
 
-  // A move changes no membership or visit, only which class holds the member.
   revalidatePath("/bookings");
   return { ok: true };
 }

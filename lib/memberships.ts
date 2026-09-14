@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { Queryable } from "@/lib/bookings";
 import { db, greekFold, likeLiteral } from "@/lib/db";
 import {
   isMembershipState,
@@ -8,6 +9,7 @@ import {
   type MembershipStatus,
   type PaymentMethod,
 } from "@/lib/enums";
+import { formatDate } from "@/lib/gym-time";
 import { parseId } from "@/lib/utils";
 
 export type Membership = {
@@ -84,10 +86,9 @@ export function membershipState(alias = "m"): string {
  * same day of the next month. Postgres clamps the short months, so 31 January
  * ends 28 February rather than overflowing into March.
  *
- * Both ends are inclusive, so a renewal starting on the end date would share
- * that one day. Renewals are recorded by hand whenever the member next pays,
- * which is rarely the exact day the last period ended, so back-to-back periods
- * do not arise in practice.
+ * Both ends are inclusive, so a renewal starting on the end date shares that
+ * one day with the period before it. findOverlap() allows exactly that much
+ * and no more.
  *
  * A one_time plan gets no end date - a visit pack is consumed by count, not by
  * the calendar.
@@ -101,6 +102,68 @@ export function periodEndsOn(startParam: string, alias = "p"): string {
     WHEN 'yearly'  THEN (${startParam}::date + interval '1 year')::date
     ELSE NULL
   END`;
+}
+
+export type Overlap = {
+  plan_name: string;
+  starts_on: string;
+  ends_on: string | null;
+};
+
+/**
+ * The membership a new period would overlap, if any: `planId` starting on
+ * `startsOn` for this member. Two periods of one member must not overlap, or
+ * the same weeks are sold twice. The membership form and the booking that
+ * creates a period on a promise both ask this, so the web and the app can only
+ * ever decide it one way. Callers hold the member lock, like every other
+ * per-member rule.
+ *
+ * Only periods take part: a dated month or year, or an unlimited pass with no
+ * end. A visit pack is consumed by count, not by the calendar, so it may sit
+ * beside anything - the August case in section 8.
+ *
+ * Only a period the member can still use blocks: active, and unlimited or with
+ * visits left. A member who spends all twelve visits by the 20th starts the
+ * next month then, on a promise or in cash, and that is a renewal, not a
+ * mistake. That is also why this is not an exclusion constraint: a cancellation
+ * hands a visit back to the old period, and a constraint reading
+ * visits_remaining would then fail the cancellation.
+ *
+ * Periods are compared end-exclusive, so a renewal may start on the day the
+ * last one ends. `excludeId` leaves out the row being edited.
+ */
+export async function findOverlap(
+  runner: Queryable,
+  userId: number,
+  planId: number,
+  startsOn: string,
+  excludeId: number | null = null,
+): Promise<Overlap | null> {
+  const { rows } = await runner.query<Overlap>(
+    `SELECT p.name AS plan_name,
+            to_char(m.starts_on, 'YYYY-MM-DD') AS starts_on,
+            to_char(m.ends_on, 'YYYY-MM-DD') AS ends_on
+     FROM memberships m
+     JOIN plans p ON p.id = m.plan_id
+     JOIN plans np ON np.id = $2
+     WHERE m.user_id = $1 AND m.id IS DISTINCT FROM $4::bigint
+       AND m.status = 'active'
+       AND (m.ends_on IS NOT NULL OR m.visits_remaining IS NULL)
+       AND (m.visits_remaining IS NULL OR m.visits_remaining > 0)
+       AND (np.billing_interval <> 'one_time' OR np.visits IS NULL)
+       AND daterange(m.starts_on, m.ends_on, '[)')
+           && daterange($3::date, ${periodEndsOn("$3", "np")}, '[)')
+     ORDER BY m.starts_on
+     LIMIT 1`,
+    [userId, planId, startsOn, excludeId],
+  );
+  return rows[0] ?? null;
+}
+
+/** The period in the way, as staff read it: 3 per week 07/09/2026 - 07/10/2026. */
+export function describeOverlap(o: Overlap): string {
+  const end = o.ends_on ? formatDate(o.ends_on) : "χωρίς λήξη";
+  return `${o.plan_name} ${formatDate(o.starts_on)} - ${end}`;
 }
 
 const COLUMNS = `m.id, m.user_id, m.plan_id, p.name AS plan_name,
@@ -186,9 +249,6 @@ export async function listMemberships(
 
   if (filter.q) {
     values.push(`%${likeLiteral(filter.q)}%`);
-    // Both sides go through greekFold: accents and final sigma make a
-    // literal ILIKE miss how Greek names are really typed and stored. The
-    // email half stays literal, since addresses are ASCII.
     where.push(
       `(${greekFold("u.first_name || ' ' || u.last_name")} ILIKE ${greekFold(`$${values.length}`)} ESCAPE '\\'
         OR u.email ILIKE $${values.length} ESCAPE '\\')`,
