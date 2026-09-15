@@ -31,7 +31,8 @@ export default async function ClassTypesPage() {
 
       {classTypes.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          No class types yet. Add the first one before building a schedule.
+          Δεν υπάρχουν ακόμη τύποι μαθημάτων. Πρόσθεσε τον πρώτο πριν φτιάξεις
+          το πρόγραμμα.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">

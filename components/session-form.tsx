@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import type { SessionFormState } from "@/app/actions/class-sessions";
-import { ActionForm, FormField } from "@/components/action-form";
+import { ActionForm, FormActions, FormField } from "@/components/action-form";
 import { DateField } from "@/components/date-field";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,8 +90,8 @@ export function SessionForm({
         </div>
         {!findSlot(start, end) && (
           <p className="text-muted-foreground text-xs">
-            Not one of the usual slots. That is allowed, so the schedule keeps
-            working if the gym changes its times.
+            Δεν είναι μία από τις συνηθισμένες ώρες. Επιτρέπεται, ώστε το
+            πρόγραμμα να δουλεύει κι αν αλλάξουν οι ώρες του γυμναστηρίου.
           </p>
         )}
       </div>
@@ -157,8 +156,8 @@ export function SessionForm({
           ))}
         </div>
         <p className="text-muted-foreground text-xs">
-          Pick more than one where the class covers both, such as Lower
-          strength and Metcon.
+          Διάλεξε περισσότερους αν το μάθημα τους καλύπτει, π.χ. Lower
+          strength και Metcon.
         </p>
       </FormField>
 
@@ -173,14 +172,11 @@ export function SessionForm({
         />
       </div>
 
-      <div className="flex gap-2 pt-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Αποθήκευση..." : submitLabel}
-        </Button>
-        <Link href={backHref} className={buttonVariants({ variant: "outline" })}>
-          Άκυρο
-        </Link>
-      </div>
+      <FormActions
+        pending={pending}
+        submitLabel={submitLabel}
+        cancelHref={backHref}
+      />
     </ActionForm>
   );
 }

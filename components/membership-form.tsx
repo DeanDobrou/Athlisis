@@ -1,29 +1,53 @@
 "use client";
 
-import Link from "next/link";
+import { Combobox } from "@base-ui/react/combobox";
+import { addMonths, addYears } from "date-fns";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useActionState, useState } from "react";
 
 import type { MembershipFormState } from "@/app/actions/memberships";
-import { ActionForm, FormField } from "@/components/action-form";
-import { DateField } from "@/components/date-field";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  ActionForm,
+  ChoiceRow,
+  FormActions,
+  FormField,
+  PriceInput,
+} from "@/components/action-form";
+import { DateField, toISODate } from "@/components/date-field";
+import { Input, inputClassName } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
+  selectTriggerClassName,
   SelectValue,
 } from "@/components/ui/select";
-import { MEMBERSHIP_STATUSES, PAYMENT_METHODS } from "@/lib/enums";
-import { todayInGym } from "@/lib/gym-time";
+import {
+  MEMBERSHIP_STATUSES,
+  PAYMENT_METHODS,
+  type BillingInterval,
+} from "@/lib/enums";
+import { formatDate, todayInGym } from "@/lib/gym-time";
 import type { Member } from "@/lib/members";
 import { formatCents } from "@/lib/money";
 import type { Membership } from "@/lib/memberships";
 import type { Plan } from "@/lib/plans";
-import { guarded } from "@/lib/utils";
+import { cn, fold, guarded } from "@/lib/utils";
+
+/**
+ * The end date the server will store, worked out the way periodEndsOn() in
+ * lib/memberships.ts does it: a month or a year on, clamped to the last day of
+ * a short month, and none for a visit pack. Display only - the server decides.
+ */
+function periodEnd(startsOn: string, interval: BillingInterval): string | null {
+  if (!startsOn || interval === "one_time") return null;
+  const start = new Date(`${startsOn}T00:00:00`);
+  return toISODate(
+    interval === "monthly" ? addMonths(start, 1) : addYears(start, 1),
+  );
+}
 
 export function MembershipForm({
   action,
@@ -53,15 +77,20 @@ export function MembershipForm({
     membership?.plan_id ?? plans[0]?.id ?? "",
   );
   const [amount, setAmount] = useState(() =>
-    membership
-      ? formatCents(membership.amount_cents)
-      : formatCents(plans[0]?.price_cents ?? 0),
+    formatCents(
+      membership ? membership.amount_cents : (plans[0]?.price_cents ?? 0),
+    ),
+  );
+  const [startsOn, setStartsOn] = useState(
+    membership?.starts_on ?? todayInGym(),
+  );
+  const [paidOn, setPaidOn] = useState(
+    membership ? (membership.paid_on ?? "") : todayInGym(),
   );
 
-  const memberItems = Object.fromEntries(
-    members.map((m) => [m.id, `${m.first_name} ${m.last_name}`]),
-  );
+  const plan = plans.find((p) => p.id === planId);
   const planItems = Object.fromEntries(plans.map((p) => [p.id, p.name]));
+  const end = plan ? periodEnd(startsOn, plan.billing_interval) : null;
 
   return (
     <ActionForm
@@ -71,25 +100,7 @@ export function MembershipForm({
     >
       {membership && <input type="hidden" name="id" value={membership.id} />}
 
-      <FormField name="user_id">
-        <Label htmlFor="user_id">Μέλος</Label>
-        <Select
-          name="user_id"
-          items={memberItems}
-          defaultValue={membership?.user_id ?? members[0]?.id}
-        >
-          <SelectTrigger id="user_id" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {members.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.first_name} {m.last_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </FormField>
+      <MemberPicker members={members} defaultValue={membership?.user_id} />
 
       <FormField name="plan_id">
         <Label htmlFor="plan_id">Πακέτο</Label>
@@ -119,79 +130,61 @@ export function MembershipForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField name="amount">
-          <Label htmlFor="amount">Τιμή (EUR)</Label>
-          <Input
+          <Label htmlFor="amount">Τιμή</Label>
+          <PriceInput
             id="amount"
             name="amount"
-            inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required
           />
         </FormField>
-        <DateField
-          name="paid_on"
-          label="Πληρώθηκε"
-          placeholder="Απλήρωτη"
-          clearLabel="Απλήρωτη"
-          defaultValue={
-            membership ? (membership.paid_on ?? "") : todayInGym()
-          }
-        />
+        <div className="grid content-start gap-2">
+          <DateField
+            name="paid_on"
+            label="Πληρώθηκε"
+            placeholder="Απλήρωτη"
+            clearLabel="Απλήρωτη"
+            defaultValue={paidOn}
+            onChange={setPaidOn}
+          />
+          {paidOn === "" && (
+            <p className="text-muted-foreground text-xs">
+              Χωρίς ημερομηνία πληρωμής εμφανίζεται ως Ανεξόφλητη.
+            </p>
+          )}
+        </div>
       </div>
 
-      <p className="text-muted-foreground text-xs">
-        Η τιμή είναι το κόστος της περιόδου. Το μηδέν σημαίνει ότι δόθηκε
-        αντί να πουληθεί. Αν καθαρίσεις την ημερομηνία, τα χρήματα δεν έχουν
-        εισπραχθεί και η συνδρομή εμφανίζεται ως Ανεξόφλητη μέχρι να
-        καταγραφούν.
-      </p>
-
-      <FormField name="method">
-        <span className="text-sm font-medium">Τρόπος πληρωμής</span>
-        <RadioGroup
-          name="method"
-          defaultValue={membership?.method ?? "cash"}
-          className="gap-3 sm:flex sm:gap-6"
-        >
-          {Object.entries(PAYMENT_METHODS).map(([value, label]) => (
-            <Label
-              key={value}
-              htmlFor={`method_${value}`}
-              className="flex items-center gap-2"
-            >
-              <RadioGroupItem id={`method_${value}`} value={value} />
-              {label}
-            </Label>
-          ))}
-        </RadioGroup>
-      </FormField>
+      <ChoiceRow
+        name="method"
+        label="Τρόπος πληρωμής"
+        options={PAYMENT_METHODS}
+        defaultValue={membership?.method ?? "cash"}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <DateField
-          name="starts_on"
-          label="Έναρξη"
-          defaultValue={membership?.starts_on ?? todayInGym()}
+        <div className="grid content-start gap-2">
+          <DateField
+            name="starts_on"
+            label="Έναρξη"
+            defaultValue={startsOn}
+            onChange={setStartsOn}
+          />
+          {plan && (
+            <p className="text-muted-foreground text-xs">
+              {end ? `Λήγει ${formatDate(end)}` : "Χωρίς ημερομηνία λήξης"}
+              {!membership &&
+                ` · ${plan.visits === null ? "απεριόριστες επισκέψεις" : `${plan.visits} επισκέψεις`}`}
+            </p>
+          )}
+        </div>
+        <ChoiceRow
+          name="status"
+          label="Κατάσταση"
+          options={MEMBERSHIP_STATUSES}
+          defaultValue={membership?.status ?? "active"}
         />
-        <FormField name="status">
-          <span className="text-sm font-medium">Κατάσταση</span>
-          <RadioGroup
-            name="status"
-            defaultValue={membership?.status ?? "active"}
-            className="gap-3"
-          >
-            {Object.entries(MEMBERSHIP_STATUSES).map(([value, label]) => (
-              <Label
-                key={value}
-                htmlFor={`status_${value}`}
-                className="flex items-center gap-2"
-              >
-                <RadioGroupItem id={`status_${value}`} value={value} />
-                {label}
-              </Label>
-            ))}
-          </RadioGroup>
-        </FormField>
       </div>
 
       {membership && (
@@ -202,30 +195,100 @@ export function MembershipForm({
             name="visits_remaining"
             inputMode="numeric"
             defaultValue={membership.visits_remaining ?? ""}
-            placeholder="Κενό για απεριόριστες"
+            placeholder={`Κενό: όσες δίνει το πακέτο (${plan?.visits ?? "απεριόριστες"})`}
           />
         </FormField>
       )}
 
-      <p className="text-muted-foreground text-xs">
-        Η ημερομηνία λήξης βγαίνει από το πακέτο: ένα μηνιαίο πακέτο φτάνει
-        ως την ίδια ημέρα του επόμενου μήνα. Οι επισκέψεις ξεκινούν από το
-        όριο του πακέτου. Η λίστα δείχνει μόνη της Ολοκληρωμένη ή
-        Προγραμματισμένη όταν η περίοδος έχει περάσει ή δεν έχει αρχίσει -
-        εδώ ορίζεις μόνο Ενεργή και Ανενεργή.
-      </p>
-
-      <div className="flex gap-2 pt-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Αποθήκευση..." : submitLabel}
-        </Button>
-        <Link
-          href="/memberships"
-          className={buttonVariants({ variant: "outline" })}
-        >
-          Άκυρο
-        </Link>
-      </div>
+      <FormActions
+        pending={pending}
+        submitLabel={submitLabel}
+        cancelHref="/memberships"
+      />
     </ActionForm>
+  );
+}
+
+type MemberItem = { value: string; label: string };
+
+/**
+ * The member, in a field that looks like the plan select below it. Opening it
+ * shows a search box above the list, so staff find a member by typing rather
+ * than scrolling everyone. Matching folds accents and final sigma, the same as
+ * member search elsewhere. Items are { value, label }, so the form submits the
+ * member id on its own.
+ */
+function MemberPicker({
+  members,
+  defaultValue,
+}: {
+  members: Member[];
+  defaultValue?: string;
+}) {
+  const items: MemberItem[] = members.map((m) => ({
+    value: m.id,
+    label: `${m.first_name} ${m.last_name}`,
+  }));
+
+  return (
+    <FormField name="user_id">
+      <Label htmlFor="user_id">Μέλος</Label>
+      <Combobox.Root
+        name="user_id"
+        items={items}
+        defaultValue={items.find((i) => i.value === defaultValue) ?? null}
+        filter={(item: MemberItem, query: string) =>
+          fold(item.label).includes(fold(query.trim()))
+        }
+      >
+        <Combobox.Trigger
+          id="user_id"
+          data-size="default"
+          className={cn(selectTriggerClassName, "w-full")}
+        >
+          <Combobox.Value>
+            {(item: MemberItem | null) => item?.label ?? "Διάλεξε μέλος"}
+          </Combobox.Value>
+          <ChevronDownIcon className="text-muted-foreground size-4" />
+        </Combobox.Trigger>
+        <Combobox.Portal>
+          <Combobox.Positioner sideOffset={4} align="start" className="isolate z-50">
+            <Combobox.Popup className="bg-popover text-popover-foreground ring-foreground/10 flex max-h-[min(22rem,var(--available-height))] w-(--anchor-width) min-w-56 flex-col overflow-hidden rounded-lg shadow-md ring-1">
+              <div className="border-b p-1">
+                {/* A plain input with the Input look, not the Input component:
+                    that one is a Base UI field control, and inside the
+                    combobox it took the field's name, so the form sent the
+                    member's name instead of the id. */}
+                <Combobox.Input
+                  placeholder="Αναζήτηση μέλους"
+                  aria-label="Αναζήτηση μέλους"
+                  className={cn(
+                    inputClassName,
+                    "border-0 bg-transparent focus-visible:ring-0 dark:bg-transparent",
+                  )}
+                />
+              </div>
+              <Combobox.Empty className="text-muted-foreground px-2.5 py-2 text-sm empty:hidden">
+                Κανένα μέλος.
+              </Combobox.Empty>
+              <Combobox.List className="overflow-y-auto p-1">
+                {(item: MemberItem) => (
+                  <Combobox.Item
+                    key={item.value}
+                    value={item}
+                    className="data-highlighted:bg-accent data-highlighted:text-accent-foreground relative flex cursor-default items-center rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none"
+                  >
+                    {item.label}
+                    <Combobox.ItemIndicator className="pointer-events-none absolute right-2 flex size-4 items-center justify-center">
+                      <CheckIcon className="size-4" />
+                    </Combobox.ItemIndicator>
+                  </Combobox.Item>
+                )}
+              </Combobox.List>
+            </Combobox.Popup>
+          </Combobox.Positioner>
+        </Combobox.Portal>
+      </Combobox.Root>
+    </FormField>
   );
 }

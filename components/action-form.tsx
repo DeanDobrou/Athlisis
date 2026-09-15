@@ -2,8 +2,11 @@
 
 import { Field } from "@base-ui/react/field";
 import { CircleAlert } from "lucide-react";
+import Link from "next/link";
 import { createContext, startTransition, use, useEffect, useRef } from "react";
 
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 /** What a form's server action returns when it refuses to save. */
@@ -114,4 +117,108 @@ export function FormField({
 export function useFieldError(name: string): string | null {
   const state = use(RefusalContext);
   return state?.field === name ? state.error : null;
+}
+
+/**
+ * Two or three choices as a row of buttons instead of stacked radios. They are
+ * real radio inputs underneath, so the form submits them with no state, arrow
+ * keys move between them, and a refusal shows under the row like any field.
+ */
+export function ChoiceRow({
+  name,
+  label,
+  options,
+  defaultValue,
+}: {
+  name: string;
+  label: string;
+  options: Record<string, string>;
+  defaultValue: string;
+}) {
+  return (
+    <FormField name={name}>
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium">{label}</legend>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(options).map(([value, text]) => (
+            <label
+              key={value}
+              className={cn(
+                buttonVariants({ variant: "outline" }),
+                "has-checked:border-primary has-checked:bg-primary has-checked:text-primary-foreground has-checked:hover:bg-primary/80 has-checked:hover:text-primary-foreground has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+              )}
+            >
+              <input
+                type="radio"
+                name={name}
+                value={value}
+                defaultChecked={value === defaultValue}
+                className="sr-only"
+              />
+              {text}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    </FormField>
+  );
+}
+
+/** A price in euros: the € sits inside the field, and a Greek comma is fine. */
+export function PriceInput({
+  className,
+  ...props
+}: React.ComponentProps<typeof Input>) {
+  return (
+    <div className="relative">
+      <Input
+        inputMode="decimal"
+        placeholder="60,00"
+        className={cn("pr-8", className)}
+        {...props}
+      />
+      <span
+        aria-hidden="true"
+        className="text-muted-foreground pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm"
+      >
+        €
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Save and Cancel. On a phone the bar sticks to the bottom of the screen, so a
+ * long form never needs scrolling back down to save; from sm up it sits after
+ * the last field. The negative margin matches the admin layout's p-6.
+ */
+export function FormActions({
+  pending,
+  submitLabel,
+  cancelHref,
+}: {
+  pending: boolean;
+  submitLabel: string;
+  cancelHref: string;
+}) {
+  return (
+    <div className="bg-background/95 sticky bottom-0 z-10 -mx-6 flex gap-2 border-t px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pt-2 sm:pb-0 sm:backdrop-blur-none">
+      <Button
+        type="submit"
+        disabled={pending}
+        className="h-10 flex-1 sm:h-8 sm:flex-none"
+      >
+        {pending ? "Αποθήκευση..." : submitLabel}
+      </Button>
+      <Link
+        href={cancelHref}
+        className={buttonVariants({
+          variant: "outline",
+          className: "h-10 flex-1 sm:h-8 sm:flex-none",
+        })}
+      >
+        Άκυρο
+      </Link>
+    </div>
+  );
 }

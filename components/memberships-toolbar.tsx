@@ -107,7 +107,7 @@ export function MembershipsToolbar({
             setChoice("plan", value === ANY ? "" : String(value))
           }
         >
-          <SelectTrigger className="w-40" aria-label="Filter by plan">
+          <SelectTrigger className="w-40" aria-label="Φίλτρο πακέτου">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -126,7 +126,7 @@ export function MembershipsToolbar({
             setChoice("state", value === ANY ? "" : String(value))
           }
         >
-          <SelectTrigger className="w-40" aria-label="Filter by state">
+          <SelectTrigger className="w-40" aria-label="Φίλτρο κατάστασης">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

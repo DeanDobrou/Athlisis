@@ -16,6 +16,18 @@ export function parseId(raw: string): number | null {
 }
 
 /**
+ * Greek text folded the way member search does on the server: accents off,
+ * lower case, final sigma made medial, so "μαρια" finds Μαρία.
+ */
+export function fold(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/ς/g, "σ")
+}
+
+/**
  * What a Server Action call that never reached the server reads as. The usual
  * cause is a deploy: action ids change with every build, so a tab left open
  * across one holds a reference the new server has never heard of. A dropped

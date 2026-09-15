@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { cancelSession } from "@/lib/bookings";
 import { db, hasPgCode, withTransaction } from "@/lib/db";
+import { redirectSaved } from "@/lib/flash";
 import {
   addDays,
   isRealDate,
@@ -106,7 +107,7 @@ export async function createSession(
   });
 
   revalidatePath("/schedule");
-  redirect(`/schedule?week=${f.day}`);
+  await redirectSaved(`/schedule?week=${f.day}`);
 }
 
 export async function updateSession(
@@ -145,7 +146,7 @@ export async function updateSession(
   if (!found) return { error: "Άγνωστο μάθημα." };
 
   revalidatePath("/schedule");
-  redirect(`/schedule?week=${f.day}`);
+  await redirectSaved(`/schedule?week=${f.day}`);
 }
 
 const count = (n: number, one: string, many: string) =>
@@ -355,8 +356,8 @@ export async function copyLastWeek(
     return {
       message:
         skipped === 0
-          ? `Copied ${added} classes from the week before.`
-          : `Copied ${added} classes, left ${skipped} slot(s) that already had one.`,
+          ? `Αντιγράφηκαν μαθήματα: ${added}.`
+          : `Αντιγράφηκαν μαθήματα: ${added}. Ώρες που είχαν ήδη μάθημα και έμειναν ως είχαν: ${skipped}.`,
     };
   });
 

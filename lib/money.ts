@@ -22,10 +22,11 @@ export function formatMoney(cents: number): string {
   }).format(cents / 100);
 }
 
+/** Money for a form field: 6000 becomes "60,00", which parsePriceToCents reads back. */
 export function formatCents(cents: number): string {
   const sign = cents < 0 ? "-" : "";
   const abs = Math.abs(cents);
-  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+  return `${sign}${Math.floor(abs / 100)},${String(abs % 100).padStart(2, "0")}`;
 }
 
 if ((import.meta as { main?: boolean }).main) {
@@ -48,10 +49,10 @@ if ((import.meta as { main?: boolean }).main) {
 
   check(parsePriceToCents("8.29") === 829, "no float drift");
 
-  check(formatCents(2500) === "25.00", "format whole");
-  check(formatCents(829) === "8.29", "format cents");
-  check(formatCents(5) === "0.05", "format pads leading zero");
-  check(formatCents(0) === "0.00", "format zero");
+  check(formatCents(2500) === "25,00", "format whole, with the Greek comma");
+  check(formatCents(829) === "8,29", "format cents");
+  check(formatCents(5) === "0,05", "format pads leading zero");
+  check(formatCents(0) === "0,00", "format zero");
 
   for (const s of ["0", "0.01", "7.07", "25.5", "999.99", "1234567.89"]) {
     const cents = parsePriceToCents(s);

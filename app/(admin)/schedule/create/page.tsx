@@ -25,7 +25,8 @@ export default async function NewSessionPage({
       <h1 className="text-2xl font-semibold">Νέο μάθημα</h1>
       {classTypes.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          There are no class types yet. Add one before scheduling a class.
+          Δεν υπάρχουν ακόμη τύποι μαθημάτων. Πρόσθεσε έναν πριν προγραμματίσεις
+          μάθημα.
         </p>
       ) : (
         <SessionForm

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db, hasPgCode } from "@/lib/db";
+import { redirectSaved } from "@/lib/flash";
 import { isBillingInterval } from "@/lib/enums";
 import { parsePriceToCents } from "@/lib/money";
 import { requireAdmin } from "@/lib/session";
@@ -78,7 +79,7 @@ export async function createPlan(
   );
 
   revalidatePath("/plans");
-  redirect("/plans");
+  await redirectSaved("/plans");
 }
 
 export async function updatePlan(
@@ -103,7 +104,7 @@ export async function updatePlan(
 
   revalidatePath("/plans");
   revalidatePath(`/plans/${id}/update`);
-  redirect("/plans");
+  await redirectSaved("/plans");
 }
 
 export async function deletePlan(

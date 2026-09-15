@@ -19,7 +19,7 @@ export default async function EditMemberPage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">
-        Edit {member.first_name} {member.last_name}
+        {member.first_name} {member.last_name}
       </h1>
       <MemberForm
         action={updateMember}

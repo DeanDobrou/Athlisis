@@ -1,11 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 
 import type { ClassTypeFormState } from "@/app/actions/class-types";
-import { ActionForm, FormField } from "@/components/action-form";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { ActionForm, FormActions, FormField } from "@/components/action-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ClassType } from "@/lib/class-types";
@@ -44,7 +42,7 @@ export function ClassTypeForm({
           id="name"
           name="name"
           defaultValue={classType?.name}
-          placeholder="WOD"
+          placeholder="Metcon"
           required
         />
       </FormField>
@@ -61,22 +59,16 @@ export function ClassTypeForm({
           className="h-9 w-20 p-1"
         />
         <p className="text-muted-foreground text-xs">
-          Used to tell classes apart on the schedule. A session can carry more
-          than one type, so keep the colours distinct.
+          Ξεχωρίζει τα μαθήματα στο πρόγραμμα. Ένα μάθημα μπορεί να έχει
+          πολλούς τύπους, οπότε κράτα τα χρώματα διακριτά.
         </p>
       </FormField>
 
-      <div className="flex gap-2 pt-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Αποθήκευση..." : submitLabel}
-        </Button>
-        <Link
-          href="/class-types"
-          className={buttonVariants({ variant: "outline" })}
-        >
-          Άκυρο
-        </Link>
-      </div>
+      <FormActions
+        pending={pending}
+        submitLabel={submitLabel}
+        cancelHref="/class-types"
+      />
     </ActionForm>
   );
 }

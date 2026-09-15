@@ -900,9 +900,10 @@ members screen ships.
 | `components/member-form.tsx` | shared create/update form, and the profile form without role or status | done |
 | `components/members-toolbar.tsx` | live filters, reset, add | done |
 | `components/delete-button.tsx` | every delete: asks first, a refusal shows as a toast | done |
-| `components/action-form.tsx` | every create/update form: errors under their field or at the top | done |
+| `components/action-form.tsx` | every create/update form: errors under their field or at the top; `ChoiceRow` for two or three choices, `PriceInput` with the €, and `FormActions`, the save bar that sticks to the bottom on a phone | done |
 | `components/confirm-dialog.tsx` | the app's replacement for the browser's `confirm()` | done |
-| `components/toaster.tsx` | toasts for button results; mounted in the admin layout | done |
+| `components/toaster.tsx` | toasts for button results, and `FlashToast`, which says Αποθηκεύτηκε after a form saved; mounted in the admin layout | done |
+| `lib/flash.ts` | `redirectSaved()`: every form save redirects through it, leaving the cookie `FlashToast` reads | done |
 | `app/login/login-form.tsx` | client form on `ActionForm`, errors at the top | done |
 | `app/login/page.tsx` | login card | done |
 | `app/(admin)/layout.tsx` | sidebar shell; deliberately holds **no** auth check | done |
@@ -911,7 +912,7 @@ members screen ships.
 | `components/breadcrumbs.tsx` | the trail in the admin header, labelled with the sidebar's titles | done |
 | `lib/breadcrumbs.ts` | turns a URL into crumbs; an id links only where its page exists; self-check with `node lib/breadcrumbs.ts` | done |
 | `components/ui/*` | shadcn/ui primitives | done |
-| `lib/utils.ts` | `cn()` class helper, and `parseId()` for every id taken from a URL or form | done |
+| `lib/utils.ts` | `cn()` class helper, `parseId()` for every id taken from a URL or form, and `fold()` for Greek search in the browser | done |
 | `db/migrations.ts` | mobile SQLite migrations + runner | not written |
 
 **Why the auth check is not in `app/(admin)/layout.tsx`.** Layouts do not
@@ -930,7 +931,9 @@ and moves focus to whichever it is. It submits through `onSubmit` rather than
 save would lose everything typed. Buttons that are not forms - deletes, the
 schedule's copy buttons, the bookings board - report through toasts. Anything
 that cannot be undone asks first in `ConfirmDialog`, never the browser's
-`confirm()`.
+`confirm()`. A save that succeeds redirects through `redirectSaved()` in
+`lib/flash.ts`, which leaves a cookie that lives thirty seconds, and
+`FlashToast` says Αποθηκεύτηκε on the page it lands on, then clears it.
 
 **`lib/db.ts` notes:** the pool is cached on `globalThis` because Next.js
 hot-reload re-evaluates modules and would otherwise leak a new pool on every

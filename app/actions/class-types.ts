@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db, hasPgCode } from "@/lib/db";
+import { redirectSaved } from "@/lib/flash";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
@@ -49,7 +50,7 @@ export async function createClassType(
   );
 
   revalidatePath("/class-types");
-  redirect("/class-types");
+  await redirectSaved("/class-types");
 }
 
 export async function updateClassType(
@@ -71,7 +72,7 @@ export async function updateClassType(
   if (rowCount === 0) return { error: "Άγνωστος τύπος μαθήματος." };
 
   revalidatePath("/class-types");
-  redirect("/class-types");
+  await redirectSaved("/class-types");
 }
 
 export async function deleteClassType(

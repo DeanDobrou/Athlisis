@@ -25,7 +25,7 @@ export default async function UpdateMembershipPage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">
-        {membership.plan_name} for {membership.member_name}
+        {membership.member_name} · {membership.plan_name}
       </h1>
       <MembershipForm
         action={updateMembership}

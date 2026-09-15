@@ -14,8 +14,8 @@ export default async function NewMembershipPage() {
       <h1 className="text-2xl font-semibold">Νέα συνδρομή</h1>
       {members.length === 0 || plans.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          A membership needs a member and a plan. Add whichever is missing
-          first.
+          Μια συνδρομή χρειάζεται μέλος και πακέτο. Πρόσθεσε πρώτα ό,τι
+          λείπει.
         </p>
       ) : (
         <MembershipForm

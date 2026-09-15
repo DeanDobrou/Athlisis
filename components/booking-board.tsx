@@ -43,25 +43,13 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { ClassSession, WeekBooking } from "@/lib/class-sessions";
 import { formatDate, weekdayName } from "@/lib/gym-time";
 import { SLOTS } from "@/lib/slots";
-import { attempt, cn } from "@/lib/utils";
+import { attempt, cn, fold } from "@/lib/utils";
 
 type Member = { id: string; name: string };
 
 type Change =
   | { type: "move"; bookingId: string; to: string }
   | { type: "remove"; bookingId: string };
-
-/**
- * Greek names compared the way member search does on the server: accents off,
- * final sigma folded, so "μαρια" finds Μαρία.
- */
-function fold(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/ς/g, "σ");
-}
 
 function label(c: ClassSession): string {
   return `${weekdayName(c.day)} ${c.start_time}-${c.end_time}`;

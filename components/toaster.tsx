@@ -2,6 +2,8 @@
 
 import { Toast } from "@base-ui/react/toast";
 import { XIcon } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -43,6 +45,21 @@ export function Toaster() {
       </Toast.Portal>
     </Toast.Provider>
   );
+}
+
+/**
+ * "Αποθηκεύτηκε" once, on the page a form's save redirected to. The action
+ * sets a short-lived cookie before redirecting (lib/flash.ts); this reads it
+ * on arrival and clears it, so a reload does not say it again.
+ */
+export function FlashToast() {
+  const pathname = usePathname();
+  useEffect(() => {
+    if (!document.cookie.split("; ").includes("flash=saved")) return;
+    document.cookie = "flash=; path=/; max-age=0";
+    toast.info("Αποθηκεύτηκε.");
+  }, [pathname]);
+  return null;
 }
 
 function Toasts() {

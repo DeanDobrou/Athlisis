@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db, hasPgCode } from "@/lib/db";
+import { redirectSaved } from "@/lib/flash";
 import { countMemberships, hasCoverageToday } from "@/lib/memberships";
 import { generatePassword, hashPassword } from "@/lib/password";
 import { requireAdmin } from "@/lib/session";
@@ -88,7 +89,7 @@ export async function createMember(
   }
 
   revalidatePath("/members");
-  redirect(`/members/${memberId}`);
+  await redirectSaved(`/members/${memberId}`);
 }
 
 /**
@@ -167,7 +168,7 @@ export async function updateMember(
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
-  redirect(`/members/${id}`);
+  await redirectSaved(`/members/${id}`);
 }
 
 /**
@@ -190,7 +191,7 @@ export async function updateProfile(
 
   revalidatePath("/members");
   revalidatePath(`/members/${admin.userId}`);
-  redirect("/dashboard");
+  await redirectSaved("/dashboard");
 }
 
 export async function deleteMember(

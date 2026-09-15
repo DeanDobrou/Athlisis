@@ -33,7 +33,7 @@ export default async function PlansPage() {
 
       {plans.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          No plans yet. Add the first one.
+          Δεν υπάρχουν ακόμη πακέτα. Πρόσθεσε το πρώτο.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">

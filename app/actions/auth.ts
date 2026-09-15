@@ -42,8 +42,8 @@ export async function login(
   const limit = rateLimit(bucket);
   if (!limit.allowed) {
     const minutes = Math.ceil(limit.retryAfterSeconds / 60);
-    const unit = minutes === 1 ? "minute" : "minutes";
-    return { error: `Too many attempts. Try again in ${minutes} ${unit}.` };
+    const unit = minutes === 1 ? "λεπτό" : "λεπτά";
+    return { error: `Πολλές προσπάθειες. Δοκίμασε ξανά σε ${minutes} ${unit}.` };
   }
 
   const { rows } = await db().query<UserRow>(

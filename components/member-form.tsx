@@ -1,27 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 
 import type { MemberFormState } from "@/app/actions/members";
-import { ActionForm, FormField } from "@/components/action-form";
+import {
+  ActionForm,
+  ChoiceRow,
+  FormActions,
+  FormField,
+} from "@/components/action-form";
 import { DateField } from "@/components/date-field";
-import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { Member } from "@/lib/members";
 import { guarded } from "@/lib/utils";
 
-const STATUS_ITEMS = { active: "Ενεργό", inactive: "Ανενεργό" };
+const ROLES = { member: "Μέλος", admin: "Διαχειριστής" };
+const STATUSES = { active: "Ενεργό", inactive: "Ανενεργό" };
 
 export function MemberForm({
   action,
@@ -112,41 +108,21 @@ export function MemberForm({
       )}
 
       {!profile && (
-        <div className="grid gap-2">
-          <span className="text-sm font-medium">Ρόλος</span>
-          <RadioGroup
-            name="role"
-            defaultValue={member?.role ?? "member"}
-            className="gap-3"
-          >
-            <Label htmlFor="role_member" className="flex items-center gap-2">
-              <RadioGroupItem id="role_member" value="member" />
-              Μέλος
-            </Label>
-            <Label htmlFor="role_admin" className="flex items-center gap-2">
-              <RadioGroupItem id="role_admin" value="admin" />
-              Διαχειριστής
-            </Label>
-          </RadioGroup>
-        </div>
+        <ChoiceRow
+          name="role"
+          label="Ρόλος"
+          options={ROLES}
+          defaultValue={member?.role ?? "member"}
+        />
       )}
 
       {profile ? null : isUpdate ? (
-        <Field id="status" label="Κατάσταση">
-          <Select
-            name="status"
-            items={STATUS_ITEMS}
-            defaultValue={member?.status ?? "active"}
-          >
-            <SelectTrigger id="status" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Ενεργό</SelectItem>
-              <SelectItem value="inactive">Ανενεργό</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        <ChoiceRow
+          name="status"
+          label="Κατάσταση"
+          options={STATUSES}
+          defaultValue={member?.status ?? "active"}
+        />
       ) : (
         <div className="grid gap-2">
           <Label
@@ -157,22 +133,17 @@ export function MemberForm({
             Αποστολή email καλωσορίσματος
           </Label>
           <p className="text-muted-foreground text-xs">
-            Email sending is not configured yet, so nothing is sent for now.
+            Η αποστολή email δεν έχει ρυθμιστεί ακόμη, οπότε προς το παρόν δεν
+            στέλνεται τίποτα.
           </p>
         </div>
       )}
 
-      <div className="flex gap-2 pt-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Αποθήκευση..." : submitLabel}
-        </Button>
-        <Link
-          href={profile ? "/dashboard" : "/members"}
-          className={buttonVariants({ variant: "outline" })}
-        >
-          Άκυρο
-        </Link>
-      </div>
+      <FormActions
+        pending={pending}
+        submitLabel={submitLabel}
+        cancelHref={profile ? "/dashboard" : "/members"}
+      />
     </ActionForm>
   );
 }

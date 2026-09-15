@@ -9,6 +9,7 @@ import {
 } from "@/lib/bookings";
 import { hasPgCode, withTransaction } from "@/lib/db";
 import { isMembershipStatus, isPaymentMethod } from "@/lib/enums";
+import { redirectSaved } from "@/lib/flash";
 import { isRealDate } from "@/lib/gym-time";
 import {
   describeOverlap,
@@ -148,7 +149,7 @@ export async function createMembership(
 
   revalidatePath("/memberships");
   revalidatePath(`/members/${f.userId}`);
-  redirect("/memberships");
+  await redirectSaved("/memberships");
 }
 
 export async function updateMembership(
@@ -258,7 +259,7 @@ export async function updateMembership(
   if (outcome.previousUserId !== String(f.userId)) {
     revalidatePath(`/members/${outcome.previousUserId}`);
   }
-  redirect("/memberships");
+  await redirectSaved("/memberships");
 }
 
 export async function deleteMembership(

@@ -35,6 +35,7 @@ export function DateField({
   endMonth,
   defaultMonth,
   captionLayout,
+  onChange,
 }: {
   name: string;
   label: string;
@@ -48,6 +49,8 @@ export function DateField({
   endMonth?: Date;
   defaultMonth?: Date;
   captionLayout?: "dropdown" | "label";
+  /** Called with the new YYYY-MM-DD, or "" when cleared. */
+  onChange?: (value: string) => void;
 }) {
   const [date, setDate] = useState<Date | undefined>(fromISODate(defaultValue));
   const [open, setOpen] = useState(false);
@@ -82,6 +85,7 @@ export function DateField({
             selected={date}
             onSelect={(picked) => {
               setDate(picked);
+              onChange?.(picked ? toISODate(picked) : "");
               setOpen(false);
             }}
             disabled={disabled}
@@ -100,6 +104,7 @@ export function DateField({
                 className="w-full"
                 onClick={() => {
                   setDate(undefined);
+                  onChange?.("");
                   setOpen(false);
                 }}
               >
