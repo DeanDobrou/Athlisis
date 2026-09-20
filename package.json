@@ -9,7 +9,8 @@
     "lint": "eslint",
     "migrate": "node scripts/migrate.mjs",
     "check:bookings": "node --env-file=.env.local --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-bookings.mts",
-    "check:dashboard": "node --env-file=.env.local --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-dashboard.mts"
+    "check:dashboard": "node --env-file=.env.local --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-dashboard.mts",
+    "check:auth": "node --env-file=.env.local --conditions=react-server --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-auth.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

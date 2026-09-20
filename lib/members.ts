@@ -1,7 +1,7 @@
 import "server-only";
 
+import type { Role } from "@/lib/auth";
 import { db, greekFold, likeLiteral } from "@/lib/db";
-import type { Role } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
 export type MemberStatus = "active" | "inactive";

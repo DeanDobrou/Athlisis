@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { endsSessions, type Session } from "@/lib/auth";
 import { db, hasPgCode } from "@/lib/db";
 import { redirectSaved } from "@/lib/flash";
 import { countMemberships, hasCoverageToday } from "@/lib/memberships";
 import { generatePassword, hashPassword } from "@/lib/password";
-import { requireAdmin } from "@/lib/session";
+import { createSession, requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
 export type MemberFormState = { error: string; field?: string } | undefined;
@@ -111,6 +112,9 @@ async function saveUser(
     };
   }
   const passwordHash = password ? await hashPassword(password) : null;
+  const bump = endsSessions(passwordHash !== null, access?.status ?? null)
+    ? 1
+    : 0;
 
   try {
     const { rowCount } = await db().query(
@@ -119,8 +123,9 @@ async function saveUser(
          date_of_birth = $5,
          role = COALESCE($6::user_role, role),
          status = COALESCE($7::user_status, status),
-         password_hash = COALESCE($8, password_hash)
-       WHERE id = $9`,
+         password_hash = COALESCE($8, password_hash),
+         token_version = token_version + $9
+       WHERE id = $10`,
       [
         f.email,
         f.firstName,
@@ -130,6 +135,7 @@ async function saveUser(
         access?.role ?? null,
         access?.status ?? null,
         passwordHash,
+        bump,
         id,
       ],
     );
@@ -141,6 +147,23 @@ async function saveUser(
     throw err;
   }
   return undefined;
+}
+
+/**
+ * Re-issues the caller's cookie after they save their own row. Setting a new
+ * password raises token_version, which would otherwise sign them out of the
+ * page they are standing on.
+ */
+async function keepOwnSessionAlive(session: Session, savedId: number) {
+  if (savedId !== session.userId) return;
+
+  const { rows } = await db().query<{ token_version: number }>(
+    "SELECT token_version FROM users WHERE id = $1",
+    [savedId],
+  );
+  if (rows[0]) {
+    await createSession({ ...session, tokenVersion: rows[0].token_version });
+  }
 }
 
 export async function updateMember(
@@ -165,6 +188,7 @@ export async function updateMember(
 
   const refused = await saveUser(id, f, formData, { role: f.role, status });
   if (refused) return refused;
+  await keepOwnSessionAlive(admin, id);
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
@@ -188,6 +212,7 @@ export async function updateProfile(
 
   const refused = await saveUser(admin.userId, f, formData, null);
   if (refused) return refused;
+  await keepOwnSessionAlive(admin, admin.userId);
 
   revalidatePath("/members");
   revalidatePath(`/members/${admin.userId}`);
