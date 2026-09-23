@@ -11,6 +11,7 @@ const {
   cancelBooking,
   cancelSession,
   checkInBooking,
+  MEMBER_CANCEL_CUTOFF_MINUTES,
   moveBooking,
   saveSessionCheckIns,
   undoCheckIn,
@@ -654,6 +655,93 @@ await run(async () => {
     check(
       !json.includes("Nikos") && !json.includes("sched-b"),
       "staff notes and other members' names never reach the phone",
+    );
+  }
+
+  // ----- a member booking and cancelling from the app ----------------
+  {
+    const covered = async (tag: string) => {
+      const u = await user(tag);
+      await membership(u, unlimited, null, "2020-01-01");
+      return u;
+    };
+    const at = (when: string) =>
+      newId(
+        `INSERT INTO class_sessions (starts_at, ends_at, capacity)
+         VALUES (${when}, ${when} + interval '1 hour', 10) RETURNING id`,
+        [],
+      );
+    const started = await at("now() - interval '30 minutes'");
+    const soon = await at("now() + interval '30 minutes'");
+    const later = await at("now() + interval '1 day'");
+    const app = { confirmUnpaid: false };
+
+    const walker = await covered("app-walker");
+    const tooLate = await bookMember(client, walker, started, app);
+    check(
+      !tooLate.ok && tooLate.error.includes("ξεκινήσει"),
+      "a member cannot book a class that has started",
+    );
+    const walkIn = await booked(walker, started);
+    check(walkIn.ok, "staff still can, which is how a walk-in is recorded");
+    check(
+      !(await cancelBooking(client, walkIn.bookingId, walker)).ok,
+      "and a member cannot cancel a class that has started",
+    );
+
+    const early = await covered("app-early");
+    const justInTime = await bookMember(client, early, soon, app);
+    check(justInTime.ok, "a member can book until the class starts");
+    const lastHour = Number(justInTime.ok && justInTime.bookingId);
+    const refused = await cancelBooking(client, lastHour, early);
+    check(
+      !refused.ok &&
+        refused.error.includes(String(MEMBER_CANCEL_CUTOFF_MINUTES)) &&
+        (await statusOf(lastHour)) === "booked",
+      "a member cannot cancel within the hour before the class, and the booking stays",
+    );
+    check(
+      (await cancelBooking(client, lastHour)).ok,
+      "staff still can cancel it at the desk",
+    );
+
+    const packer = await user("app-packer");
+    const pack = await membership(packer, pack5, 5, "2020-01-01");
+    const ahead = await bookMember(client, packer, later, app);
+    const aheadId = Number(ahead.ok && ahead.bookingId);
+    check(
+      (await cancelBooking(client, aheadId, packer)).ok &&
+        (await visitsOf(pack)) === 5,
+      "a member can cancel more than an hour ahead, and gets the visit back",
+    );
+
+    const other = await covered("app-other");
+    const theirs = await bookMember(client, other, later, app);
+    const theirsId = Number(theirs.ok && theirs.bookingId);
+    const stolen = await cancelBooking(client, theirsId, packer);
+    check(
+      !stolen.ok &&
+        stolen.error === "Άγνωστη κράτηση." &&
+        (await statusOf(theirsId)) === "booked",
+      "a member cannot cancel someone else's booking, and is not told it exists",
+    );
+
+    const promiser = await user("app-promiser");
+    await membership(promiser, pack12, 0, "2020-01-01");
+    const asked = await bookMember(client, promiser, later, app);
+    check(
+      !asked.ok &&
+        asked.confirmUnpaidCents === 6000 &&
+        (await count("FROM memberships WHERE user_id = $1", [promiser])) === 1 &&
+        (await count("FROM bookings WHERE user_id = $1", [promiser])) === 0,
+      "with no coverage a member is asked to confirm the price first, and nothing is written",
+    );
+    const confirmed = await bookMember(client, promiser, later, {
+      confirmUnpaid: true,
+    });
+    check(
+      confirmed.ok && confirmed.createdMembership,
+      "confirming books the class on a new unpaid membership",
     );
   }
 });

@@ -8,6 +8,7 @@ import {
   findOverlap,
   periodEndsOn,
 } from "@/lib/memberships";
+import { formatMoney } from "@/lib/money";
 
 /**
  * The booking rules, in one place, so the web dashboard today and the mobile
@@ -24,6 +25,9 @@ import {
  */
 
 export const HOLDS_A_PLACE = "('booked', 'checked_in', 'no_show')";
+
+/** Members may cancel until this many minutes before a class starts. */
+export const MEMBER_CANCEL_CUTOFF_MINUTES = 60;
 export type Queryable = Pick<PoolClient, "query">;
 
 export const TRAINED_ON_UNPAID_MEMBERSHIP =
@@ -45,7 +49,12 @@ async function lockMemberOf(
   return rows[0]?.user_id ?? null;
 }
 
-type LockedSession = { ok: true; capacity: number; day: string };
+type LockedSession = {
+  ok: true;
+  capacity: number;
+  day: string;
+  started: boolean;
+};
 
 /** Locks the class row, since capacity is a count across rows; refuses a cancelled one. */
 async function lockSession(
@@ -56,8 +65,10 @@ async function lockSession(
     capacity: number;
     status: string;
     day: string;
+    started: boolean;
   }>(
-    `SELECT capacity, status, to_char(starts_at, 'YYYY-MM-DD') AS day
+    `SELECT capacity, status, to_char(starts_at, 'YYYY-MM-DD') AS day,
+            starts_at <= now() AS started
      FROM class_sessions WHERE id = $1 FOR UPDATE`,
     [sessionId],
   );
@@ -65,7 +76,8 @@ async function lockSession(
   if (rows[0].status === "cancelled") {
     return { ok: false, error: "Το μάθημα έχει ακυρωθεί." };
   }
-  return { ok: true, capacity: rows[0].capacity, day: rows[0].day };
+  const { capacity, day, started } = rows[0];
+  return { ok: true, capacity, day, started };
 }
 
 /**
@@ -112,12 +124,18 @@ export type BookingResult =
       membershipId: string;
       createdMembership: boolean;
     }
-  | Refused;
+  | (Refused & { confirmUnpaidCents?: number });
 
+/**
+ * Books a member into a class. `asMember` is set when members book themselves
+ * from the app: they cannot book a class that has started, and with no
+ * coverage they are refused with the price until they confirm.
+ */
 export async function bookMember(
   client: PoolClient,
   userId: number,
   sessionId: number,
+  asMember?: { confirmUnpaid: boolean },
 ): Promise<BookingResult> {
   const { rows: member } = await client.query<{ status: string }>(
     "SELECT status FROM users WHERE id = $1 FOR UPDATE",
@@ -130,6 +148,9 @@ export async function bookMember(
 
   const session = await lockSession(client, sessionId);
   if (!session.ok) return session;
+  if (asMember && session.started) {
+    return { ok: false, error: "Το μάθημα έχει ήδη ξεκινήσει." };
+  }
   const { day } = session;
 
   const { rows: existing } = await client.query<{ status: string }>(
@@ -210,6 +231,14 @@ export async function bookMember(
       };
     }
 
+    if (asMember && !asMember.confirmUnpaid) {
+      return {
+        ok: false,
+        error: `Δεν έχεις κάλυψη για αυτό το μάθημα. Αν κλείσεις θέση, πληρώνεις ${formatMoney(last[0].price_cents)} στην είσοδο.`,
+        confirmUnpaidCents: last[0].price_cents,
+      };
+    }
+
     // Unpaid by construction: paid_on and recorded_by stay NULL, and the plan
     // is priced above zero, which memberships_unpaid_owes_something requires of an unpaid row.
     const { rows: made } = await client.query<{ id: string }>(
@@ -256,13 +285,38 @@ export type CancelResult =
  * Returns the visit. `unpaidLeftCents` is set when the membership that paid is
  * unpaid with no booking left on it: a promise nobody is keeping, which the
  * caller reports or voids.
+ *
+ * `byMemberId` is set when members cancel from the app: they can cancel only
+ * their own bookings, and only until MEMBER_CANCEL_CUTOFF_MINUTES before the
+ * class. Someone else's booking is reported as unknown.
  */
 export async function cancelBooking(
   client: PoolClient,
   bookingId: number,
+  byMemberId?: number,
 ): Promise<CancelResult> {
-  if ((await lockMemberOf(client, "bookings", bookingId)) === null) {
+  const owner = await lockMemberOf(client, "bookings", bookingId);
+  if (
+    owner === null ||
+    (byMemberId !== undefined && Number(owner) !== byMemberId)
+  ) {
     return { ok: false, error: "Άγνωστη κράτηση." };
+  }
+
+  if (byMemberId !== undefined) {
+    const { rowCount: inTime } = await client.query(
+      `SELECT 1 FROM bookings b
+       JOIN class_sessions s ON s.id = b.class_session_id
+       WHERE b.id = $1
+         AND s.starts_at - now() > make_interval(mins => $2::int)`,
+      [bookingId, MEMBER_CANCEL_CUTOFF_MINUTES],
+    );
+    if (!inTime) {
+      return {
+        ok: false,
+        error: `Η ακύρωση γίνεται έως ${MEMBER_CANCEL_CUTOFF_MINUTES} λεπτά πριν από την έναρξη του μαθήματος.`,
+      };
+    }
   }
 
   const { rows: cancelled } = await client.query<{ membership_id: string }>(
