@@ -11,12 +11,15 @@ const {
   cancelBooking,
   cancelSession,
   checkInBooking,
+  MEMBER_CANCEL_CUTOFF_MINUTES,
   moveBooking,
   saveSessionCheckIns,
   undoCheckIn,
   voidUnpaidMembership,
 } = await import("@/lib/bookings");
-const { listWeekBookings } = await import("@/lib/class-sessions");
+const { listWeekBookings, memberSchedule } = await import(
+  "@/lib/class-sessions"
+);
 const { findOverlap } = await import("@/lib/memberships");
 
 await run(async () => {
@@ -587,6 +590,158 @@ await run(async () => {
     check(
       !late.ok && late.error.includes("ακυρωθεί"),
       "a cancelled class cannot be booked",
+    );
+  }
+
+  // ----- the member's schedule, as the phone receives it -------------
+  {
+    const today = "2031-08-18";
+    const edgeIn = await session("2031-07-19");
+    const edgeOut = await session("2031-07-18");
+    const far = await session("2031-11-03");
+    const off = await session("2031-08-21", 10, "cancelled");
+    const cls = await session("2031-08-20", 8);
+    await client.query("UPDATE class_sessions SET notes = $1 WHERE id = $2", [
+      "coach off sick, cover by Nikos",
+      cls,
+    ]);
+
+    const member = async (tag: string) => {
+      const u = await user(tag);
+      await membership(u, unlimited, null);
+      return u;
+    };
+    const a = await member("sched-a");
+    const b = await member("sched-b");
+    const c = await member("sched-c");
+    const aBooking = await booked(a, cls);
+    const bBooking = await booked(b, cls);
+    const cBooking = await booked(c, cls);
+    await cancelBooking(client, cBooking.bookingId);
+    await checkInBooking(client, aBooking.bookingId);
+
+    const view = (u: number) => memberSchedule(u, today, client);
+    const find = <T extends { id: string }>(rows: T[], id: number) =>
+      rows.find((r) => Number(r.id) === id);
+
+    const seenByA = await view(a);
+    check(
+      Boolean(find(seenByA, edgeIn)) && !find(seenByA, edgeOut),
+      "the schedule reaches back 30 days and no further",
+    );
+    check(Boolean(find(seenByA, far)), "and has no forward limit");
+    check(
+      find(seenByA, off)?.status === "cancelled",
+      "a cancelled class is still listed, marked cancelled",
+    );
+    check(
+      find(seenByA, cls)?.booked === 2,
+      "places taken counts the checked-in and the booked, not the cancelled",
+    );
+    check(
+      find(seenByA, cls)?.my_booking?.id === String(aBooking.bookingId) &&
+        find(seenByA, cls)?.my_booking?.status === "checked_in",
+      "a member sees their own booking and its state",
+    );
+    check(
+      find(await view(b), cls)?.my_booking?.id === String(bBooking.bookingId),
+      "and never another member's",
+    );
+    check(
+      find(await view(c), cls)?.my_booking === null,
+      "a cancelled booking shows as not booked",
+    );
+    const json = JSON.stringify(seenByA);
+    check(
+      !json.includes("Nikos") && !json.includes("sched-b"),
+      "staff notes and other members' names never reach the phone",
+    );
+  }
+
+  // ----- a member booking and cancelling from the app ----------------
+  {
+    const covered = async (tag: string) => {
+      const u = await user(tag);
+      await membership(u, unlimited, null, "2020-01-01");
+      return u;
+    };
+    const at = (when: string) =>
+      newId(
+        `INSERT INTO class_sessions (starts_at, ends_at, capacity)
+         VALUES (${when}, ${when} + interval '1 hour', 10) RETURNING id`,
+        [],
+      );
+    const started = await at("now() - interval '30 minutes'");
+    const soon = await at("now() + interval '30 minutes'");
+    const later = await at("now() + interval '1 day'");
+    const app = { confirmUnpaid: false };
+
+    const walker = await covered("app-walker");
+    const tooLate = await bookMember(client, walker, started, app);
+    check(
+      !tooLate.ok && tooLate.error.includes("ξεκινήσει"),
+      "a member cannot book a class that has started",
+    );
+    const walkIn = await booked(walker, started);
+    check(walkIn.ok, "staff still can, which is how a walk-in is recorded");
+    check(
+      !(await cancelBooking(client, walkIn.bookingId, walker)).ok,
+      "and a member cannot cancel a class that has started",
+    );
+
+    const early = await covered("app-early");
+    const justInTime = await bookMember(client, early, soon, app);
+    check(justInTime.ok, "a member can book until the class starts");
+    const lastHour = Number(justInTime.ok && justInTime.bookingId);
+    const refused = await cancelBooking(client, lastHour, early);
+    check(
+      !refused.ok &&
+        refused.error.includes(String(MEMBER_CANCEL_CUTOFF_MINUTES)) &&
+        (await statusOf(lastHour)) === "booked",
+      "a member cannot cancel within the hour before the class, and the booking stays",
+    );
+    check(
+      (await cancelBooking(client, lastHour)).ok,
+      "staff still can cancel it at the desk",
+    );
+
+    const packer = await user("app-packer");
+    const pack = await membership(packer, pack5, 5, "2020-01-01");
+    const ahead = await bookMember(client, packer, later, app);
+    const aheadId = Number(ahead.ok && ahead.bookingId);
+    check(
+      (await cancelBooking(client, aheadId, packer)).ok &&
+        (await visitsOf(pack)) === 5,
+      "a member can cancel more than an hour ahead, and gets the visit back",
+    );
+
+    const other = await covered("app-other");
+    const theirs = await bookMember(client, other, later, app);
+    const theirsId = Number(theirs.ok && theirs.bookingId);
+    const stolen = await cancelBooking(client, theirsId, packer);
+    check(
+      !stolen.ok &&
+        stolen.error === "Άγνωστη κράτηση." &&
+        (await statusOf(theirsId)) === "booked",
+      "a member cannot cancel someone else's booking, and is not told it exists",
+    );
+
+    const promiser = await user("app-promiser");
+    await membership(promiser, pack12, 0, "2020-01-01");
+    const asked = await bookMember(client, promiser, later, app);
+    check(
+      !asked.ok &&
+        asked.confirmUnpaidCents === 6000 &&
+        (await count("FROM memberships WHERE user_id = $1", [promiser])) === 1 &&
+        (await count("FROM bookings WHERE user_id = $1", [promiser])) === 0,
+      "with no coverage a member is asked to confirm the price first, and nothing is written",
+    );
+    const confirmed = await bookMember(client, promiser, later, {
+      confirmUnpaid: true,
+    });
+    check(
+      confirmed.ok && confirmed.createdMembership,
+      "confirming books the class on a new unpaid membership",
     );
   }
 });

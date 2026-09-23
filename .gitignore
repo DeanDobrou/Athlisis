@@ -43,3 +43,6 @@ next-env.d.ts
 # agent tooling: .claude/skills symlinks duplicate .agents/skills on Windows
 # (core.symlinks=false), so track .agents/ only
 .claude/
+
+# graphify knowledge graph output (local only)
+/graphify-out/

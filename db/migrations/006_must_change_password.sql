@@ -1,0 +1,13 @@
+-- =====================================================================
+-- 006 - must_change_password
+--
+-- Marks an account whose password somebody else chose: a member created
+-- by staff, who gets a generated one, or a member given a new one at the
+-- desk. While it is set, logging in from the app returns a short-lived
+-- token that can only set a new password, so the given password works
+-- exactly once.
+--
+-- Admins are never marked: whoever creates one types the password on the
+-- form. Every existing account starts unmarked.
+-- =====================================================================
+ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT false;

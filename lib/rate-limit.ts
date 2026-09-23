@@ -51,6 +51,24 @@ export function clearRateLimit(key: string): void {
   hits.delete(key);
 }
 
+/**
+ * The address a limit is keyed on: the rightmost x-forwarded-for entry, which
+ * is the one our own proxy appended. Takes anything with a get(), so both
+ * next/headers and request.headers fit.
+ */
+export function clientIp(headers: {
+  get(name: string): string | null;
+}): string {
+  return headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() || "local";
+}
+
+/** The "too many attempts" message, with the wait rounded up to minutes. */
+export function retryMessage(retryAfterSeconds: number): string {
+  const minutes = Math.ceil(retryAfterSeconds / 60);
+  const unit = minutes === 1 ? "λεπτό" : "λεπτά";
+  return `Πολλές προσπάθειες. Δοκίμασε ξανά σε ${minutes} ${unit}.`;
+}
+
 if ((import.meta as { main?: boolean }).main) {
   const check = (ok: boolean, msg: string) => {
     if (!ok) throw new Error(msg);

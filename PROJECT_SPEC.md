@@ -146,8 +146,8 @@ work is not lost - see "Scores, when they return" below.
 
 - **Money as integer cents.** Never floats.
 - **Bookings have a status lifecycle**, not just exists/doesn't:
-  `booked → waitlisted → checked_in → no_show → cancelled`. This one table
-  powers attendance, waitlist promotion, no-show tracking, and churn alerts.
+  `booked → checked_in → no_show → cancelled`. This one table powers
+  attendance, no-show tracking, and churn alerts.
 - **Unique (user, session)** on bookings. Cancel-then-rebook is therefore an
   `UPDATE`, so the booking service is upsert-shaped - there is never a second
   row.
@@ -165,11 +165,6 @@ work is not lost - see "Scores, when they return" below.
   same transaction.
 - **Guard rails that cost nothing:** no negative visits, no zero-or-negative
   capacity, and `ends_at > starts_at` on every session.
-- **Waitlist position is derived, not stored.** `ROW_NUMBER() OVER (PARTITION
-  BY class_session_id ORDER BY booked_at)` over waitlisted rows. A stored
-  column plus a partial unique index breaks on promotion (renumbering 2→1 and
-  3→2 in one statement trips the index mid-statement, and partial indexes
-  cannot be `DEFERRABLE`), and it can drift. Derived cannot.
 - **Soft deletes on synced tables.** `wods`, `class_sessions` and
   `class_types` carry `deleted_at` and are never hard-deleted. `GET /sync?since=`
   can say "this row changed" but has no way to say "this row is gone", so a
@@ -393,10 +388,6 @@ class that day; the class is not full; then entitlement. Paid coverage is
 looked up before the debt gate, not after it. The other way round, click order
 decided whether a paid month could still be used: booking a day past the month
 created an unpaid one, which then refused a day still inside it.
-
-**A full class is refused, not waitlisted.** A waitlist needs promotion, and
-promotion has to re-run every rule above for someone who may have started
-owing money since they joined it. The two land together.
 
 **Staff may book a class that has started or ended** - that is how a walk-in
 gets recorded. The cutoff that stops members doing the same, and a
@@ -969,8 +960,8 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
    service in `lib/bookings.ts` - capacity, entitlement resolution, the unpaid
    membership, one class a day, cancellation, moving and voiding - checked by
    `npm run check:bookings`; and the **Κρατήσεις** board, where staff drag
-   members between classes and tap to cancel or add. Deferred: waitlists and
-   `settings` (§8)
+   members between classes and tap to cancel or add. Deferred: `settings`
+   (§8)
 6. **Done** - **Check-in.** A roll call per class at `/bookings/[id]`, opened
    from that class on the board: big rows, an "all present" button, and one
    Save. `checkInBooking`, `undoCheckIn` and `saveSessionCheckIns` in

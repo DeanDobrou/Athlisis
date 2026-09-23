@@ -129,11 +129,13 @@ export function ChoiceRow({
   label,
   options,
   defaultValue,
+  onChange,
 }: {
   name: string;
   label: string;
   options: Record<string, string>;
   defaultValue: string;
+  onChange?: (value: string) => void;
 }) {
   return (
     <FormField name={name}>
@@ -153,6 +155,7 @@ export function ChoiceRow({
                 name={name}
                 value={value}
                 defaultChecked={value === defaultValue}
+                onChange={onChange && (() => onChange(value))}
                 className="sr-only"
               />
               {text}

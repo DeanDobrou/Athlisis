@@ -1,24 +1,18 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { db } from "@/lib/db";
-import { hashPassword, verifyPassword } from "@/lib/password";
-import { clearRateLimit, rateLimit } from "@/lib/rate-limit";
-import { createSession, destroySession, type Role } from "@/lib/session";
+import { authenticate } from "@/lib/auth";
+import {
+  clearRateLimit,
+  clientIp,
+  rateLimit,
+  retryMessage,
+} from "@/lib/rate-limit";
+import { createSession, destroySession } from "@/lib/session";
 
 export type LoginState = { error: string } | undefined;
-
-const decoyHash = hashPassword(randomBytes(32).toString("hex"));
-
-type UserRow = {
-  id: string;
-  password_hash: string;
-  role: Role;
-  status: "active" | "inactive";
-};
 
 export async function login(
   _prev: LoginState,
@@ -33,44 +27,20 @@ export async function login(
     return { error: "Συμπλήρωσε email και κωδικό." };
   }
 
-  const forwarded = (await headers()).get("x-forwarded-for");
-  // Rightmost entry: appended by our own proxy. Everything left of it is
-  // client-supplied, so keying on it would let forged headers dodge the limit.
-  const ip = forwarded?.split(",").at(-1)?.trim() || "local";
-  const bucket = `login:${ip}:${email}`;
-
+  const bucket = `login:${clientIp(await headers())}:${email}`;
   const limit = rateLimit(bucket);
   if (!limit.allowed) {
-    const minutes = Math.ceil(limit.retryAfterSeconds / 60);
-    const unit = minutes === 1 ? "λεπτό" : "λεπτά";
-    return { error: `Πολλές προσπάθειες. Δοκίμασε ξανά σε ${minutes} ${unit}.` };
+    return { error: retryMessage(limit.retryAfterSeconds) };
   }
 
-  const { rows } = await db().query<UserRow>(
-    "SELECT id, password_hash, role, status FROM users WHERE lower(email) = $1",
-    [email],
-  );
-  const user = rows[0];
-
-  const passwordOk = await verifyPassword(
-    password,
-    user ? user.password_hash : await decoyHash,
-  );
-
-  // One message for every failure. Saying "no such account" would turn this
-  // form into a way to discover which emails are registered.
-  const ok =
-    Boolean(user) &&
-    passwordOk &&
-    user.status === "active" &&
-    user.role === "admin";
-
-  if (!ok) {
+  // Admins only: the dashboard has no member side.
+  const session = await authenticate(email, password, "admin");
+  if (!session) {
     return { error: "Λάθος email ή κωδικός." };
   }
 
   clearRateLimit(bucket);
-  await createSession({ userId: Number(user.id), role: user.role });
+  await createSession(session);
 
   // Outside any try/catch: redirect() signals by throwing, and a catch would
   // swallow it and silently leave the user on the login page.
