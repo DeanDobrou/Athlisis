@@ -8,8 +8,10 @@ const {
   authenticate,
   changePassword,
   endsSessions,
+  mintSetPasswordToken,
   mintToken,
   requireUser,
+  setFirstPassword,
 } = await import("@/lib/auth");
 const { hashPassword } = await import("@/lib/password");
 const { SignJWT } = await import("jose");
@@ -202,5 +204,84 @@ await run(async () => {
     (await login("pw", fresh))?.userId === pw &&
       (await login("pw", password)) === null,
     "the new password logs in and the old one no longer does",
+  );
+
+  // ----- a password somebody else chose -------------------------------
+  const temp = await user("temp", "member");
+  const mark = () =>
+    client.query("UPDATE users SET must_change_password = true WHERE id = $1", [
+      temp,
+    ]);
+  await mark();
+  const set = (token: string, next: string) =>
+    setFirstPassword(token, next, client);
+
+  const first = await login("temp", password);
+  check(
+    first?.mustChangePassword === true,
+    "an account on a given password is marked at login",
+  );
+  const setToken = await mintSetPasswordToken(first!);
+  check(
+    (await gate(`Bearer ${setToken}`)) === null,
+    "the set-password token cannot be used as a session",
+  );
+
+  const weak = await set(setToken, "weakpassword");
+  check(
+    !weak.ok &&
+      !weak.signInAgain &&
+      (await login("temp", password))?.mustChangePassword === true,
+    "a weak new password is refused and the mark stays",
+  );
+
+  const chosen = "Chosen passw0rd!";
+  const done = await set(setToken, chosen);
+  check(
+    done.ok && (await gate(`Bearer ${done.token}`))?.userId === temp,
+    "choosing a password returns a token that works straight away",
+  );
+  check(
+    (await login("temp", chosen))?.mustChangePassword === false &&
+      (await login("temp", password)) === null,
+    "the mark is cleared and the given password no longer works",
+  );
+  const again = await set(setToken, "Another passw0rd!");
+  check(
+    !again.ok && again.signInAgain,
+    "the set-password token works only once",
+  );
+
+  await mark();
+  const pending = await mintSetPasswordToken((await login("temp", chosen))!);
+  await client.query(
+    "UPDATE users SET token_version = token_version + 1 WHERE id = $1",
+    [temp],
+  );
+  const stale = await set(pending, "Another passw0rd!");
+  check(
+    !stale.ok && stale.signInAgain,
+    "a staff reset in between cancels the pending set-password token",
+  );
+
+  const current = (await login("temp", chosen))!;
+  const now = Math.floor(Date.now() / 1000);
+  const expired = await new SignJWT({
+    purpose: "set-password",
+    tokenVersion: current.tokenVersion,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(String(temp))
+    .setIssuedAt(now - 3600)
+    .setExpirationTime(now - 60)
+    .sign(new TextEncoder().encode(process.env.SESSION_SECRET ?? ""));
+  const late = await set(expired, "Another passw0rd!");
+  check(
+    !late.ok && late.signInAgain,
+    "an expired set-password token is refused",
+  );
+  check(
+    (await set(await mintSetPasswordToken(current), "Another passw0rd!")).ok,
+    "while a fresh one for the same account still works",
   );
 });

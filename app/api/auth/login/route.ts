@@ -1,4 +1,4 @@
-import { authenticate, mintToken } from "@/lib/auth";
+import { authenticate, mintSetPasswordToken, mintToken } from "@/lib/auth";
 import {
   clearRateLimit,
   clientIp,
@@ -9,7 +9,8 @@ import {
 /**
  * Logs a member or an admin in and returns a token for the mobile app. The
  * token goes in the body rather than a cookie, because the app keeps it in
- * expo-secure-store.
+ * expo-secure-store. An account still on a password somebody else chose gets
+ * a setPasswordToken instead, for POST /api/auth/set-password.
  */
 export async function POST(request: Request) {
   let body: unknown;
@@ -54,5 +55,10 @@ export async function POST(request: Request) {
   }
 
   clearRateLimit(bucket);
+  if (session.mustChangePassword) {
+    return Response.json({
+      setPasswordToken: await mintSetPasswordToken(session),
+    });
+  }
   return Response.json({ token: await mintToken(session) });
 }

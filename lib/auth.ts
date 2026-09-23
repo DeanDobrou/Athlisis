@@ -28,22 +28,25 @@ const decoyHash = hashPassword(randomBytes(32).toString("hex"));
 /**
  * Checks an email and password and returns the session, or null. Pass a role
  * to require it; leave it out to accept any role. The email is trimmed and
- * matched case-insensitively.
+ * matched case-insensitively. `mustChangePassword` is set while the account
+ * still has a password somebody else chose.
  */
 export async function authenticate(
   email: string,
   password: string,
   role?: Role,
   runner: Queryable = db(),
-): Promise<Session | null> {
+): Promise<(Session & { mustChangePassword: boolean }) | null> {
   const { rows } = await runner.query<{
     id: string;
     password_hash: string;
     role: Role;
     status: "active" | "inactive";
     token_version: number;
+    must_change_password: boolean;
   }>(
-    `SELECT id, password_hash, role, status, token_version
+    `SELECT id, password_hash, role, status, token_version,
+            must_change_password
      FROM users WHERE lower(email) = $1`,
     [email.trim().toLowerCase()],
   );
@@ -63,6 +66,7 @@ export async function authenticate(
     userId: Number(user.id),
     role: user.role,
     tokenVersion: user.token_version,
+    mustChangePassword: user.must_change_password,
   };
 }
 
@@ -83,6 +87,19 @@ export function mintToken(session: Session): Promise<string> {
     .sign(signingKey());
 }
 
+/** A token that expires in 15 minutes and can only set a new password. */
+export function mintSetPasswordToken(session: Session): Promise<string> {
+  return new SignJWT({
+    purpose: "set-password",
+    tokenVersion: session.tokenVersion,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(String(session.userId))
+    .setIssuedAt()
+    .setExpirationTime("15m")
+    .sign(signingKey());
+}
+
 /** Reads a session out of a JWT, or null if it is missing or not valid. */
 export async function readToken(
   token: string | undefined,
@@ -95,6 +112,7 @@ export async function readToken(
     const { payload } = await jwtVerify(token, key, {
       algorithms: ["HS256"],
     });
+    if (payload.purpose !== undefined) return null;
 
     const role = payload.role;
     if (role !== "admin" && role !== "member") return null;
@@ -114,6 +132,14 @@ export async function readToken(
   }
 }
 
+/** The token from an `Authorization: Bearer ...` header, if there is one. */
+export function bearerToken(request: Request): string | undefined {
+  const [scheme, value] = (request.headers.get("authorization") ?? "").split(
+    " ",
+  );
+  return scheme?.toLowerCase() === "bearer" ? value : undefined;
+}
+
 /**
  * Reads the bearer token off a request and confirms the account is still
  * active, returning the session with its current role. Every handler under
@@ -123,12 +149,7 @@ export async function requireUser(
   request: Request,
   runner: Queryable = db(),
 ): Promise<Session | null> {
-  const [scheme, value] = (request.headers.get("authorization") ?? "").split(
-    " ",
-  );
-  const session = await readToken(
-    scheme?.toLowerCase() === "bearer" ? value : undefined,
-  );
+  const session = await readToken(bearerToken(request));
   if (!session) return null;
 
   const { rows } = await runner.query<{ role: Role }>(
@@ -170,7 +191,8 @@ export async function changePassword(
     role: Role;
     token_version: number;
   }>(
-    `UPDATE users SET password_hash = $1, token_version = token_version + 1
+    `UPDATE users SET password_hash = $1, must_change_password = false,
+       token_version = token_version + 1
      WHERE id = $2
      RETURNING role, token_version`,
     [await hashPassword(next), userId],
@@ -179,6 +201,61 @@ export async function changePassword(
     userId,
     role: saved[0].role,
     tokenVersion: saved[0].token_version,
+  });
+  return { ok: true, token };
+}
+
+/**
+ * Replaces a password somebody else chose, using the token login returned for
+ * it, and returns a normal token. `signInAgain` means the token has expired or
+ * was already used, so the app should go back to the login screen.
+ */
+export async function setFirstPassword(
+  setPasswordToken: string | undefined,
+  next: string,
+  runner: Queryable = db(),
+): Promise<
+  { ok: true; token: string } | { ok: false; error: string; signInAgain: boolean }
+> {
+  const expired = {
+    ok: false as const,
+    error: "Η σύνδεση έληξε. Συνδέσου ξανά με τον κωδικό που σου δόθηκε.",
+    signInAgain: true,
+  };
+  if (!setPasswordToken) return expired;
+
+  const key = signingKey();
+  let userId: number;
+  let tokenVersion: unknown;
+  try {
+    const { payload } = await jwtVerify(setPasswordToken, key, {
+      algorithms: ["HS256"],
+    });
+    if (payload.purpose !== "set-password") return expired;
+    userId = Number(payload.sub);
+    tokenVersion = payload.tokenVersion;
+  } catch {
+    return expired;
+  }
+  if (typeof tokenVersion !== "number") return expired;
+
+  const problem = passwordProblem(next);
+  if (problem) return { ok: false, error: problem, signInAgain: false };
+
+  const { rows } = await runner.query<{ role: Role; token_version: number }>(
+    `UPDATE users SET password_hash = $1, must_change_password = false,
+       token_version = token_version + 1
+     WHERE id = $2 AND status = 'active' AND must_change_password
+       AND token_version = $3
+     RETURNING role, token_version`,
+    [await hashPassword(next), userId, tokenVersion],
+  );
+  if (!rows[0]) return expired;
+
+  const token = await mintToken({
+    userId,
+    role: rows[0].role,
+    tokenVersion: rows[0].token_version,
   });
   return { ok: true, token };
 }

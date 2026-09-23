@@ -73,8 +73,9 @@ export async function createMember(
   try {
     const { rows } = await db().query<{ id: string }>(
       `INSERT INTO users
-         (email, password_hash, first_name, last_name, phone, role, date_of_birth)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (email, password_hash, first_name, last_name, phone, role,
+          date_of_birth, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
       [
         f.email,
@@ -84,6 +85,7 @@ export async function createMember(
         f.phone,
         f.role,
         f.dateOfBirth,
+        !isAdmin,
       ],
     );
     memberId = rows[0].id;
@@ -121,6 +123,9 @@ async function saveUser(
   const bump = endsSessions(passwordHash !== null, access?.status ?? null)
     ? 1
     : 0;
+  // Staff setting a member's password: the member chooses their own on the
+  // next login.
+  const mustChange = passwordHash !== null && access?.role === "member";
 
   try {
     const { rowCount } = await db().query(
@@ -130,6 +135,8 @@ async function saveUser(
          role = COALESCE($6::user_role, role),
          status = COALESCE($7::user_status, status),
          password_hash = COALESCE($8, password_hash),
+         must_change_password = CASE WHEN $8 IS NULL
+           THEN must_change_password ELSE $11::boolean END,
          token_version = token_version + $9
        WHERE id = $10`,
       [
@@ -143,6 +150,7 @@ async function saveUser(
         passwordHash,
         bump,
         id,
+        mustChange,
       ],
     );
     if (rowCount === 0) return { error: "Άγνωστο μέλος." };
