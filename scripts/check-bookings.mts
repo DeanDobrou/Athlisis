@@ -16,7 +16,9 @@ const {
   undoCheckIn,
   voidUnpaidMembership,
 } = await import("@/lib/bookings");
-const { listWeekBookings } = await import("@/lib/class-sessions");
+const { listWeekBookings, memberSchedule } = await import(
+  "@/lib/class-sessions"
+);
 const { findOverlap } = await import("@/lib/memberships");
 
 await run(async () => {
@@ -587,6 +589,71 @@ await run(async () => {
     check(
       !late.ok && late.error.includes("ακυρωθεί"),
       "a cancelled class cannot be booked",
+    );
+  }
+
+  // ----- the member's schedule, as the phone receives it -------------
+  {
+    const today = "2031-08-18";
+    const edgeIn = await session("2031-07-19");
+    const edgeOut = await session("2031-07-18");
+    const far = await session("2031-11-03");
+    const off = await session("2031-08-21", 10, "cancelled");
+    const cls = await session("2031-08-20", 8);
+    await client.query("UPDATE class_sessions SET notes = $1 WHERE id = $2", [
+      "coach off sick, cover by Nikos",
+      cls,
+    ]);
+
+    const member = async (tag: string) => {
+      const u = await user(tag);
+      await membership(u, unlimited, null);
+      return u;
+    };
+    const a = await member("sched-a");
+    const b = await member("sched-b");
+    const c = await member("sched-c");
+    const aBooking = await booked(a, cls);
+    const bBooking = await booked(b, cls);
+    const cBooking = await booked(c, cls);
+    await cancelBooking(client, cBooking.bookingId);
+    await checkInBooking(client, aBooking.bookingId);
+
+    const view = (u: number) => memberSchedule(u, today, client);
+    const find = <T extends { id: string }>(rows: T[], id: number) =>
+      rows.find((r) => Number(r.id) === id);
+
+    const seenByA = await view(a);
+    check(
+      Boolean(find(seenByA, edgeIn)) && !find(seenByA, edgeOut),
+      "the schedule reaches back 30 days and no further",
+    );
+    check(Boolean(find(seenByA, far)), "and has no forward limit");
+    check(
+      find(seenByA, off)?.status === "cancelled",
+      "a cancelled class is still listed, marked cancelled",
+    );
+    check(
+      find(seenByA, cls)?.booked === 2,
+      "places taken counts the checked-in and the booked, not the cancelled",
+    );
+    check(
+      find(seenByA, cls)?.my_booking?.id === String(aBooking.bookingId) &&
+        find(seenByA, cls)?.my_booking?.status === "checked_in",
+      "a member sees their own booking and its state",
+    );
+    check(
+      find(await view(b), cls)?.my_booking?.id === String(bBooking.bookingId),
+      "and never another member's",
+    );
+    check(
+      find(await view(c), cls)?.my_booking === null,
+      "a cancelled booking shows as not booked",
+    );
+    const json = JSON.stringify(seenByA);
+    check(
+      !json.includes("Nikos") && !json.includes("sched-b"),
+      "staff notes and other members' names never reach the phone",
     );
   }
 });

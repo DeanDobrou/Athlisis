@@ -4,7 +4,7 @@ import { HOLDS_A_PLACE, type Queryable } from "@/lib/bookings";
 import type { ClassType } from "@/lib/class-types";
 import { db } from "@/lib/db";
 import type { BookingStatus } from "@/lib/enums";
-import { TRAINING_DAYS } from "@/lib/gym-time";
+import { addDays, TRAINING_DAYS, todayInGym } from "@/lib/gym-time";
 import { membershipState } from "@/lib/memberships";
 import { parseId } from "@/lib/utils";
 
@@ -63,6 +63,43 @@ const COLUMNS = `s.id,
 const FROM = `FROM class_sessions s
   LEFT JOIN class_session_types st ON st.class_session_id = s.id
   LEFT JOIN class_types t ON t.id = st.class_type_id`;
+
+export type MemberClass = Omit<ClassSession, "notes"> & {
+  booked: number;
+  my_booking: { id: string; status: BookingStatus } | null;
+};
+
+/**
+ * Every class from 30 days before `today` onward, as a member's phone shows
+ * it: how many places are taken, and the member's own booking if they hold
+ * one. Staff notes and other members are left out.
+ */
+export async function memberSchedule(
+  userId: number,
+  today = todayInGym(),
+  runner: Queryable = db(),
+): Promise<MemberClass[]> {
+  const { rows } = await runner.query<MemberClass>(
+    `SELECT c.id, c.day, c.start_time, c.end_time, c.capacity, c.status,
+            c.is_past, c.types,
+            (SELECT count(*)::int FROM bookings b
+             WHERE b.class_session_id = c.id
+               AND b.status IN ${HOLDS_A_PLACE}) AS booked,
+            (SELECT json_build_object('id', b.id::text, 'status', b.status)
+             FROM bookings b
+             WHERE b.class_session_id = c.id AND b.user_id = $1
+               AND b.status IN ${HOLDS_A_PLACE}) AS my_booking
+     FROM (
+       SELECT ${COLUMNS}, s.starts_at
+       ${FROM}
+       WHERE s.starts_at >= $2::date
+       GROUP BY s.id
+     ) c
+     ORDER BY c.starts_at`,
+    [userId, addDays(today, -30)],
+  );
+  return rows;
+}
 
 /**
  * Monday to Friday of the week starting `weekStart`. The gym does not train
