@@ -17,7 +17,7 @@ const { SignJWT } = await import("jose");
 const email = (tag: string) => `check-auth-${tag}@test.local`;
 
 const request = (authorization?: string) =>
-  new Request("https://gym.test/api/me", {
+  new Request("https://gym.test/api/user-profile", {
     headers: authorization ? { authorization } : {},
   });
 
