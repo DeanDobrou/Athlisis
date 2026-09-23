@@ -7,13 +7,16 @@ import { endsSessions, type Session } from "@/lib/auth";
 import { db, hasPgCode } from "@/lib/db";
 import { redirectSaved } from "@/lib/flash";
 import { countMemberships, hasCoverageToday } from "@/lib/memberships";
-import { generatePassword, hashPassword } from "@/lib/password";
+import {
+  generatePassword,
+  hashPassword,
+  MIN_PASSWORD_LENGTH,
+} from "@/lib/password";
 import { createSession, requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
 export type MemberFormState = { error: string; field?: string } | undefined;
 
-const MIN_PASSWORD_LENGTH = 8;
 
 type Fields = ReturnType<typeof parseFields>;
 

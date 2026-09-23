@@ -18,6 +18,8 @@ const P = 1;
 const KEY_LEN = 64;
 const MAXMEM = 64 * 1024 * 1024;
 
+export const MIN_PASSWORD_LENGTH = 8;
+
 /**
  * Returns `scrypt:N:r:p:salt:key`, salt and key base64.
  *

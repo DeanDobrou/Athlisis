@@ -4,9 +4,13 @@
  */
 import { check, client, newId, run } from "./check.mts";
 
-const { authenticate, endsSessions, mintToken, requireUser } = await import(
-  "@/lib/auth"
-);
+const {
+  authenticate,
+  changePassword,
+  endsSessions,
+  mintToken,
+  requireUser,
+} = await import("@/lib/auth");
 const { hashPassword } = await import("@/lib/password");
 const { SignJWT } = await import("jose");
 
@@ -163,5 +167,39 @@ await run(async () => {
     (await gate(`Bearer ${await tokenFor(member, "member", 2)}`))?.userId ===
       member,
     "but the member can log in again and get a working one",
+  );
+
+  const pw = await user("pw", "member");
+  const pwToken = await tokenFor(pw, "member", 0);
+  const change = (current: string, next: string) =>
+    changePassword(pw, current, next, client);
+  const fresh = "a brand new password";
+
+  check(
+    !(await change("wrong", fresh)).ok,
+    "a password change needs the right current password",
+  );
+  check(
+    !(await change(password, "short")).ok,
+    "and a new one of at least 8 characters",
+  );
+  check(
+    (await gate(`Bearer ${pwToken}`))?.userId === pw,
+    "a refused change leaves the member signed in",
+  );
+
+  const changed = await change(password, fresh);
+  check(
+    changed.ok && (await gate(`Bearer ${changed.token}`))?.userId === pw,
+    "a change hands back a token that works straight away",
+  );
+  check(
+    (await gate(`Bearer ${pwToken}`)) === null,
+    "while every older token stops working",
+  );
+  check(
+    (await login("pw", fresh))?.userId === pw &&
+      (await login("pw", password)) === null,
+    "the new password logs in and the old one no longer does",
   );
 });

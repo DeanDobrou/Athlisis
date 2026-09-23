@@ -6,7 +6,11 @@ import { SignJWT, jwtVerify } from "jose";
 
 import type { Queryable } from "@/lib/bookings";
 import { db } from "@/lib/db";
-import { hashPassword, verifyPassword } from "@/lib/password";
+import {
+  hashPassword,
+  MIN_PASSWORD_LENGTH,
+  verifyPassword,
+} from "@/lib/password";
 
 export type Role = "member" | "admin";
 export type Session = { userId: number; role: Role; tokenVersion: number };
@@ -139,4 +143,46 @@ export async function requireUser(
     role: rows[0].role,
     tokenVersion: session.tokenVersion,
   };
+}
+
+/**
+ * Replaces a user's password after checking the current one, and returns a
+ * fresh token. Raising token_version signs every other device out.
+ */
+export async function changePassword(
+  userId: number,
+  current: string,
+  next: string,
+  runner: Queryable = db(),
+): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+  if (next.length < MIN_PASSWORD_LENGTH) {
+    return {
+      ok: false,
+      error: `Ο νέος κωδικός πρέπει να έχει τουλάχιστον ${MIN_PASSWORD_LENGTH} χαρακτήρες.`,
+    };
+  }
+
+  const { rows } = await runner.query<{ password_hash: string }>(
+    "SELECT password_hash FROM users WHERE id = $1 AND status = 'active'",
+    [userId],
+  );
+  if (!rows[0] || !(await verifyPassword(current, rows[0].password_hash))) {
+    return { ok: false, error: "Ο τρέχων κωδικός είναι λάθος." };
+  }
+
+  const { rows: saved } = await runner.query<{
+    role: Role;
+    token_version: number;
+  }>(
+    `UPDATE users SET password_hash = $1, token_version = token_version + 1
+     WHERE id = $2
+     RETURNING role, token_version`,
+    [await hashPassword(next), userId],
+  );
+  const token = await mintToken({
+    userId,
+    role: saved[0].role,
+    tokenVersion: saved[0].token_version,
+  });
+  return { ok: true, token };
 }
