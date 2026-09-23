@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import type { MemberFormState } from "@/app/actions/members";
 import {
@@ -39,6 +39,21 @@ export function MemberForm({
     undefined,
   );
   const isUpdate = Boolean(member);
+  const [role, setRole] = useState<string>(member?.role ?? "member");
+
+  const passwordField = (
+    <Field id="password" label={isUpdate ? "Νέος κωδικός" : "Κωδικός"}>
+      <Input
+        id="password"
+        name="password"
+        type="password"
+        autoComplete="new-password"
+        placeholder={
+          isUpdate ? "Άφησέ το κενό για να μείνει ο ίδιος" : undefined
+        }
+      />
+    </Field>
+  );
 
   return (
     <ActionForm
@@ -95,17 +110,7 @@ export function MemberForm({
         />
       </div>
 
-      {isUpdate && (
-        <Field id="password" label="Νέος κωδικός">
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Άφησέ το κενό για να μείνει ο ίδιος"
-          />
-        </Field>
-      )}
+      {isUpdate && passwordField}
 
       {!profile && (
         <ChoiceRow
@@ -113,8 +118,11 @@ export function MemberForm({
           label="Ρόλος"
           options={ROLES}
           defaultValue={member?.role ?? "member"}
+          onChange={setRole}
         />
       )}
+
+      {!isUpdate && role === "admin" && passwordField}
 
       {profile ? null : isUpdate ? (
         <ChoiceRow
@@ -123,7 +131,7 @@ export function MemberForm({
           options={STATUSES}
           defaultValue={member?.status ?? "active"}
         />
-      ) : (
+      ) : role === "admin" ? null : (
         <div className="grid gap-2">
           <Label
             htmlFor="send_welcome_email"

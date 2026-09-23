@@ -54,12 +54,19 @@ export async function createMember(
   const invalid = validate(f);
   if (invalid) return invalid;
 
-  const sendWelcomeEmail = formData.get("send_welcome_email") !== null;
+  const isAdmin = f.role === "admin";
+  const sendWelcomeEmail =
+    !isAdmin && formData.get("send_welcome_email") !== null;
 
-  // password_hash is NOT NULL, so an account always has one. It is never
-  // displayed: the member gets it from the welcome email, or an admin sets a
-  // new one on the update form.
-  const password = generatePassword();
+  // A member gets a generated password and replaces it on their first login.
+  // An admin's password is typed on the form.
+  const password = isAdmin
+    ? String(formData.get("password") ?? "")
+    : generatePassword();
+  if (isAdmin) {
+    const problem = passwordProblem(password);
+    if (problem) return { field: "password", error: problem };
+  }
   const passwordHash = await hashPassword(password);
 
   let memberId: string;
