@@ -18,7 +18,23 @@ const P = 1;
 const KEY_LEN = 64;
 const MAXMEM = 64 * 1024 * 1024;
 
-export const MIN_PASSWORD_LENGTH = 8;
+const MIN_PASSWORD_LENGTH = 8;
+
+/**
+ * The error for a password someone chose, or null when it is fine: at least
+ * 8 characters, with a capital letter, a number and a symbol. Greek capitals
+ * count, and a space does not count as a symbol.
+ */
+export function passwordProblem(password: string): string | null {
+  const ok =
+    password.length >= MIN_PASSWORD_LENGTH &&
+    /\p{Lu}/u.test(password) &&
+    /\p{Nd}/u.test(password) &&
+    /[^\p{L}\p{N}\s]/u.test(password);
+  return ok
+    ? null
+    : `Ο κωδικός πρέπει να έχει τουλάχιστον ${MIN_PASSWORD_LENGTH} χαρακτήρες, με ένα κεφαλαίο γράμμα, έναν αριθμό και ένα σύμβολο.`;
+}
 
 /**
  * Returns `scrypt:N:r:p:salt:key`, salt and key base64.
@@ -86,6 +102,14 @@ if ((import.meta as { main?: boolean }).main) {
     const hash = await hashPassword(pw);
 
     check(await verifyPassword(pw, hash), "correct password must verify");
+
+    check(passwordProblem("Abcdef1!") === null, "a password meeting every rule passes");
+    check(passwordProblem("Κωδικός1!") === null, "a Greek capital counts as a capital");
+    check(passwordProblem("Ab1!xyz") !== null, "7 characters is too short");
+    check(passwordProblem("abcdef1!") !== null, "no capital is refused");
+    check(passwordProblem("Abcdefg!") !== null, "no number is refused");
+    check(passwordProblem("Abcdefg1") !== null, "no symbol is refused");
+    check(passwordProblem("Abcdef1 x") !== null, "a space is not a symbol");
     check(!(await verifyPassword("wrong", hash)), "wrong password must fail");
     check(
       hash !== (await hashPassword(pw)),

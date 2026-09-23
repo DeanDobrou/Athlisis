@@ -173,15 +173,16 @@ await run(async () => {
   const pwToken = await tokenFor(pw, "member", 0);
   const change = (current: string, next: string) =>
     changePassword(pw, current, next, client);
-  const fresh = "a brand new password";
+  const fresh = "A brand new passw0rd!";
 
   check(
     !(await change("wrong", fresh)).ok,
     "a password change needs the right current password",
   );
   check(
-    !(await change(password, "short")).ok,
-    "and a new one of at least 8 characters",
+    !(await change(password, "Sh0rt!")).ok &&
+      !(await change(password, "longenoughbutweak")).ok,
+    "and a new one that meets the password rules",
   );
   check(
     (await gate(`Bearer ${pwToken}`))?.userId === pw,

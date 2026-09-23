@@ -10,7 +10,7 @@ import { countMemberships, hasCoverageToday } from "@/lib/memberships";
 import {
   generatePassword,
   hashPassword,
-  MIN_PASSWORD_LENGTH,
+  passwordProblem,
 } from "@/lib/password";
 import { createSession, requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
@@ -108,12 +108,8 @@ async function saveUser(
   access: { role: string; status: string } | null,
 ): Promise<MemberFormState> {
   const password = String(formData.get("password") ?? "");
-  if (password && password.length < MIN_PASSWORD_LENGTH) {
-    return {
-      field: "password",
-      error: `Ο νέος κωδικός πρέπει να έχει τουλάχιστον ${MIN_PASSWORD_LENGTH} χαρακτήρες.`,
-    };
-  }
+  const problem = password ? passwordProblem(password) : null;
+  if (problem) return { field: "password", error: problem };
   const passwordHash = password ? await hashPassword(password) : null;
   const bump = endsSessions(passwordHash !== null, access?.status ?? null)
     ? 1

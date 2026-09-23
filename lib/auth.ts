@@ -8,7 +8,7 @@ import type { Queryable } from "@/lib/bookings";
 import { db } from "@/lib/db";
 import {
   hashPassword,
-  MIN_PASSWORD_LENGTH,
+  passwordProblem,
   verifyPassword,
 } from "@/lib/password";
 
@@ -155,12 +155,8 @@ export async function changePassword(
   next: string,
   runner: Queryable = db(),
 ): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
-  if (next.length < MIN_PASSWORD_LENGTH) {
-    return {
-      ok: false,
-      error: `Ο νέος κωδικός πρέπει να έχει τουλάχιστον ${MIN_PASSWORD_LENGTH} χαρακτήρες.`,
-    };
-  }
+  const problem = passwordProblem(next);
+  if (problem) return { ok: false, error: problem };
 
   const { rows } = await runner.query<{ password_hash: string }>(
     "SELECT password_hash FROM users WHERE id = $1 AND status = 'active'",
