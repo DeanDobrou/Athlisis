@@ -123,9 +123,6 @@ async function saveUser(
   const bump = endsSessions(passwordHash !== null, access?.status ?? null)
     ? 1
     : 0;
-  // Staff setting a member's password: the member chooses their own on the
-  // next login.
-  const mustChange = passwordHash !== null && access?.role === "member";
 
   try {
     const { rowCount } = await db().query(
@@ -135,8 +132,6 @@ async function saveUser(
          role = COALESCE($6::user_role, role),
          status = COALESCE($7::user_status, status),
          password_hash = COALESCE($8, password_hash),
-         must_change_password = CASE WHEN $8 IS NULL
-           THEN must_change_password ELSE $11::boolean END,
          token_version = token_version + $9
        WHERE id = $10`,
       [
@@ -150,7 +145,6 @@ async function saveUser(
         passwordHash,
         bump,
         id,
-        mustChange,
       ],
     );
     if (rowCount === 0) return { error: "Άγνωστο μέλος." };
