@@ -4,7 +4,7 @@ import { HOLDS_A_PLACE, type Queryable } from "@/lib/bookings";
 import type { ClassType } from "@/lib/class-types";
 import { db } from "@/lib/db";
 import type { BookingStatus } from "@/lib/enums";
-import { addDays, TRAINING_DAYS, todayInGym } from "@/lib/gym-time";
+import { TRAINING_DAYS, todayInGym } from "@/lib/gym-time";
 import { membershipState } from "@/lib/memberships";
 import { parseId } from "@/lib/utils";
 
@@ -69,10 +69,13 @@ export type MemberClass = Omit<ClassSession, "notes"> & {
   my_booking: { id: string; status: BookingStatus } | null;
 };
 
+/** How many whole months back a member's phone can page. */
+const MEMBER_HISTORY_MONTHS = 12;
+
 /**
- * Every class from 30 days before `today` onward, as a member's phone shows
- * it: how many places are taken, and the member's own booking if they hold
- * one. Staff notes and other members are left out.
+ * Every class from the 1st of the month a year before `today` onward, as a
+ * member's phone shows it: how many places are taken, and the member's own
+ * booking if they hold one. Staff notes and other members are left out.
  */
 export async function memberSchedule(
   userId: number,
@@ -92,11 +95,11 @@ export async function memberSchedule(
      FROM (
        SELECT ${COLUMNS}, s.starts_at
        ${FROM}
-       WHERE s.starts_at >= $2::date
+       WHERE s.starts_at >= date_trunc('month', $2::date) - make_interval(months => $3)
        GROUP BY s.id
      ) c
      ORDER BY c.starts_at`,
-    [userId, addDays(today, -30)],
+    [userId, today, MEMBER_HISTORY_MONTHS],
   );
   return rows;
 }

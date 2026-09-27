@@ -596,8 +596,8 @@ await run(async () => {
   // ----- the member's schedule, as the phone receives it -------------
   {
     const today = "2031-08-18";
-    const edgeIn = await session("2031-07-19");
-    const edgeOut = await session("2031-07-18");
+    const edgeIn = await session("2030-08-01");
+    const edgeOut = await session("2030-07-31");
     const far = await session("2031-11-03");
     const off = await session("2031-08-21", 10, "cancelled");
     const cls = await session("2031-08-20", 8);
@@ -627,7 +627,7 @@ await run(async () => {
     const seenByA = await view(a);
     check(
       Boolean(find(seenByA, edgeIn)) && !find(seenByA, edgeOut),
-      "the schedule reaches back 30 days and no further",
+      "the schedule reaches back to the 1st of the month a year ago and no further",
     );
     check(Boolean(find(seenByA, far)), "and has no forward limit");
     check(
