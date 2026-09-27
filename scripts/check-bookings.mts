@@ -743,5 +743,25 @@ await run(async () => {
       confirmed.ok && confirmed.createdMembership,
       "confirming books the class on a new unpaid membership",
     );
+
+    const twice = await covered("app-twice");
+    const at18 = await at("timestamp '2031-12-01 18:00'");
+    const at19 = await at("timestamp '2031-12-01 19:00'");
+    await bookMember(client, twice, at18, app);
+    const again = await bookMember(client, twice, at18, app);
+    check(
+      !again.ok && again.error.startsWith("Έχεις ήδη κλείσει θέση σε αυτό"),
+      "a member is told in their own words that they already hold that class",
+    );
+    const sameDay = await bookMember(client, twice, at19, app);
+    check(
+      !sameDay.ok && sameDay.error.startsWith("Έχεις ήδη κλείσει θέση σε άλλο"),
+      "and that they already hold another class that day",
+    );
+    const atDesk = await book(twice, at19);
+    check(
+      !atDesk.ok && atDesk.error.startsWith("Το μέλος"),
+      "while staff at the desk still get the staff wording",
+    );
   }
 });

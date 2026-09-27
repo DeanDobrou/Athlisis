@@ -92,6 +92,7 @@ async function placeRefused(
   sessionId: number,
   session: LockedSession,
   exceptBookingId: number | null,
+  forMember = false,
 ): Promise<Refused | null> {
   const { rowCount: sameDay } = await client.query(
     `SELECT 1 FROM bookings b
@@ -103,7 +104,12 @@ async function placeRefused(
     [userId, session.day, exceptBookingId],
   );
   if (sameDay) {
-    return { ok: false, error: "Το μέλος έχει ήδη κράτηση εκείνη την ημέρα." };
+    return {
+      ok: false,
+      error: forMember
+        ? "Έχεις ήδη κλείσει θέση σε άλλο μάθημα εκείνη την ημέρα."
+        : "Το μέλος έχει ήδη κράτηση εκείνη την ημέρα.",
+    };
   }
 
   const { rows: taken } = await client.query<{ count: string }>(
@@ -137,6 +143,8 @@ export async function bookMember(
   sessionId: number,
   asMember?: { confirmUnpaid: boolean },
 ): Promise<BookingResult> {
+  const say = (staff: string, member: string) => (asMember ? member : staff);
+
   const { rows: member } = await client.query<{ status: string }>(
     "SELECT status FROM users WHERE id = $1 FOR UPDATE",
     [userId],
@@ -160,7 +168,10 @@ export async function bookMember(
   if (existing.length > 0 && existing[0].status !== "cancelled") {
     return {
       ok: false,
-      error: "Το μέλος έχει ήδη κράτηση σε αυτό το μάθημα.",
+      error: say(
+        "Το μέλος έχει ήδη κράτηση σε αυτό το μάθημα.",
+        "Έχεις ήδη κλείσει θέση σε αυτό το μάθημα.",
+      ),
     };
   }
 
@@ -183,12 +194,22 @@ export async function bookMember(
     if (owes) {
       return {
         ok: false,
-        error: "Το μέλος χρωστάει για συνδρομή. Νέα κράτηση μόλις πληρώσει.",
+        error: say(
+          "Το μέλος χρωστάει για συνδρομή. Νέα κράτηση μόλις πληρώσει.",
+          "Έχεις ανεξόφλητη συνδρομή. Νέα κράτηση γίνεται αφού την πληρώσεις στη γραμματεία.",
+        ),
       };
     }
   }
 
-  const refused = await placeRefused(client, userId, sessionId, session, null);
+  const refused = await placeRefused(
+    client,
+    userId,
+    sessionId,
+    session,
+    null,
+    asMember !== undefined,
+  );
   if (refused) return refused;
 
   let membershipId: string;
@@ -209,16 +230,20 @@ export async function bookMember(
     if (last.length === 0) {
       return {
         ok: false,
-        error:
+        error: say(
           "Το μέλος δεν είχε ποτέ συνδρομή. Η πρώτη γίνεται από την οθόνη Συνδρομές.",
+          "Δεν έχεις ακόμη συνδρομή. Η πρώτη γίνεται στη γραμματεία.",
+        ),
       };
     }
 
     if (last[0].price_cents === 0) {
       return {
         ok: false,
-        error:
+        error: say(
           "Το μέλος δεν έχει κάλυψη και το τελευταίο του πακέτο είναι δωρεάν, οπότε δεν γίνεται κράτηση με υπόσχεση πληρωμής. Αν συνεχίζει, φτιάξε ξανά τη συνδρομή από την οθόνη Συνδρομές.",
+          "Δεν έχεις κάλυψη εκείνη την ημέρα. Μίλησε με τη γραμματεία για τη συνδρομή σου.",
+        ),
       };
     }
     const planId = Number(last[0].plan_id);
@@ -227,7 +252,10 @@ export async function bookMember(
     if (clash) {
       return {
         ok: false,
-        error: `Το μέλος δεν έχει κάλυψη εκείνη την ημέρα και μια νέα συνδρομή θα επικαλυπτόταν με τη ${describeOverlap(clash)}. Διόρθωσε πρώτα την έναρξή της.`,
+        error: say(
+          `Το μέλος δεν έχει κάλυψη εκείνη την ημέρα και μια νέα συνδρομή θα επικαλυπτόταν με τη ${describeOverlap(clash)}. Διόρθωσε πρώτα την έναρξή της.`,
+          "Δεν έχεις κάλυψη εκείνη την ημέρα, και μια νέα συνδρομή θα επικαλυπτόταν με την τρέχουσα. Μίλησε με τη γραμματεία.",
+        ),
       };
     }
 
