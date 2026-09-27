@@ -206,6 +206,18 @@ await run(async () => {
     "the new password logs in and the old one no longer does",
   );
 
+  const racer = await user("racer", "member");
+  const both = await Promise.all([
+    changePassword(racer, password, "Racer passw0rd!", client),
+    changePassword(racer, password, "Racer passw0rd!", client),
+  ]);
+  const winners = both.flatMap((r) => (r.ok ? [r.token] : []));
+  check(
+    winners.length === 1 &&
+      (await gate(`Bearer ${winners[0]}`))?.userId === racer,
+    "two changes at once: one wins and its token works, the other changes nothing",
+  );
+
   // ----- a password somebody else chose -------------------------------
   const temp = await user("temp", "member");
   const mark = () =>

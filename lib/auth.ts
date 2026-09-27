@@ -168,7 +168,8 @@ export async function requireUser(
 
 /**
  * Replaces a user's password after checking the current one, and returns a
- * fresh token. Raising token_version signs every other device out.
+ * fresh token. Raising token_version signs every other device out. If another
+ * change lands between the check and the save, this one changes nothing.
  */
 export async function changePassword(
   userId: number,
@@ -193,10 +194,16 @@ export async function changePassword(
   }>(
     `UPDATE users SET password_hash = $1, must_change_password = false,
        token_version = token_version + 1
-     WHERE id = $2
+     WHERE id = $2 AND password_hash = $3
      RETURNING role, token_version`,
-    [await hashPassword(next), userId],
+    [await hashPassword(next), userId, rows[0].password_hash],
   );
+  if (!saved[0]) {
+    return {
+      ok: false,
+      error: "Ο κωδικός μόλις άλλαξε από άλλο αίτημα, οπότε αυτή η αλλαγή δεν έγινε.",
+    };
+  }
   const token = await mintToken({
     userId,
     role: saved[0].role,
