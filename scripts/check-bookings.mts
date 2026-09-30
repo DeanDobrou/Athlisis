@@ -755,7 +755,7 @@ await run(async () => {
     );
     const sameDay = await bookMember(client, twice, at19, app);
     check(
-      !sameDay.ok && sameDay.error.startsWith("Έχεις ήδη κλείσει θέση σε άλλο"),
+      !sameDay.ok && sameDay.error.includes("αυτή την ημέρα"),
       "and that they already hold another class that day",
     );
     const atDesk = await book(twice, at19);
