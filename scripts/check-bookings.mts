@@ -11,7 +11,9 @@ const {
   cancelBooking,
   cancelSession,
   checkInBooking,
+  checkInByMember,
   MEMBER_CANCEL_CUTOFF_MINUTES,
+  MEMBER_CHECK_IN_OPENS_MINUTES,
   moveBooking,
   saveSessionCheckIns,
   undoCheckIn,
@@ -762,6 +764,50 @@ await run(async () => {
     check(
       !atDesk.ok && atDesk.error.startsWith("Το μέλος"),
       "while staff at the desk still get the staff wording",
+    );
+
+    const checkIn = async (tag: string, when: number) => {
+      const u = await covered(tag);
+      return { u, id: (await booked(u, when)).bookingId };
+    };
+    const opening = await at(
+      `now() + interval '${MEMBER_CHECK_IN_OPENS_MINUTES - 1} minutes'`,
+    );
+    const ended = await at("now() - interval '2 hours'");
+
+    const punctual = await checkIn("in-punctual", opening);
+    check(
+      (await checkInByMember(client, punctual.id, punctual.u)).ok &&
+        (await statusOf(punctual.id)) === "checked_in",
+      "a member can check in just before the class starts",
+    );
+    check(
+      (await checkInByMember(client, punctual.id, punctual.u)).ok,
+      "and tapping again, or after staff ticked them, is not an error",
+    );
+    const running = await checkIn("in-running", started);
+    check(
+      (await checkInByMember(client, running.id, running.u)).ok,
+      "a member can check in while the class is running",
+    );
+    const eager = await checkIn("in-eager", soon);
+    const tooSoon = await checkInByMember(client, eager.id, eager.u);
+    check(
+      !tooSoon.ok &&
+        tooSoon.error.includes(String(MEMBER_CHECK_IN_OPENS_MINUTES)) &&
+        (await statusOf(eager.id)) === "booked",
+      "a member cannot check in earlier than that",
+    );
+    const tardy = await checkIn("in-tardy", ended);
+    check(
+      !(await checkInByMember(client, tardy.id, tardy.u)).ok &&
+        (await statusOf(tardy.id)) === "booked",
+      "nor after the class has ended",
+    );
+    const nosy = await checkInByMember(client, eager.id, punctual.u);
+    check(
+      !nosy.ok && nosy.error === "Άγνωστη κράτηση.",
+      "a member cannot check in someone else",
     );
   }
 });

@@ -28,6 +28,9 @@ export const HOLDS_A_PLACE = "('booked', 'checked_in', 'no_show')";
 
 /** Members may cancel until this many minutes before a class starts. */
 export const MEMBER_CANCEL_CUTOFF_MINUTES = 60;
+
+/** Members may check in from this many minutes before a class starts until it ends. */
+export const MEMBER_CHECK_IN_OPENS_MINUTES = 10;
 export type Queryable = Pick<PoolClient, "query">;
 
 export const TRAINED_ON_UNPAID_MEMBERSHIP =
@@ -422,6 +425,44 @@ export function checkInBooking(client: PoolClient, bookingId: number) {
 /** Takes a check-in back, for the tap that hit the wrong name. */
 export function undoCheckIn(client: PoolClient, bookingId: number) {
   return setPresence(client, bookingId, false);
+}
+
+/**
+ * Checks a member in from the app: only their own booking, and only from
+ * MEMBER_CHECK_IN_OPENS_MINUTES before the class until it ends. Already
+ * checked in, by staff or an earlier tap, counts as done.
+ */
+export async function checkInByMember(
+  client: PoolClient,
+  bookingId: number,
+  memberId: number,
+): Promise<{ ok: true } | Refused> {
+  const owner = await lockMemberOf(client, "bookings", bookingId);
+  if (owner === null || Number(owner) !== memberId) {
+    return { ok: false, error: "Άγνωστη κράτηση." };
+  }
+
+  const { rows } = await client.query<{ status: string; open: boolean }>(
+    `SELECT b.status,
+            now() BETWEEN s.starts_at - make_interval(mins => $2::int)
+                      AND s.ends_at AS open
+     FROM bookings b
+     JOIN class_sessions s ON s.id = b.class_session_id
+     WHERE b.id = $1`,
+    [bookingId, MEMBER_CHECK_IN_OPENS_MINUTES],
+  );
+  const { status, open } = rows[0];
+  if (status === "checked_in") return { ok: true };
+  if (status !== "booked") {
+    return { ok: false, error: "Η κράτηση δεν είναι ενεργή." };
+  }
+  if (!open) {
+    return {
+      ok: false,
+      error: `Το check-in γίνεται από ${MEMBER_CHECK_IN_OPENS_MINUTES} λεπτά πριν από την έναρξη έως το τέλος του μαθήματος.`,
+    };
+  }
+  return checkInBooking(client, bookingId);
 }
 
 export type CheckInSaveResult = {
