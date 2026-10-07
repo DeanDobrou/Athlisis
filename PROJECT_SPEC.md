@@ -40,7 +40,7 @@ never by the person themselves - see §10.
 | Local dev | Postgres in **Docker**, Next.js via `npm run dev` (faster hot reload) |
 | Production | **Own VPS**, everything in Docker, **Caddy** reverse proxy (auto HTTPS) |
 | Payments | **Manual entry only.** No payment processor; no Stripe columns |
-| Email | Transactional only - welcome credentials. Transport not yet chosen; see §10 |
+| Email | Transactional only - welcome email and emailed codes, over SMTP; see §10 |
 
 **Architecture shape:** one API, two clients - the same pattern as a
 yii2 + Ionic setup, with TypeScript everywhere.
@@ -804,13 +804,17 @@ login form.
   own included, from the members screen.
 - **Members** are created by an admin on the members screen. The create form
   generates a random password and carries a **Send welcome email** checkbox.
-  When it is ticked the member receives an email containing their email
-  address and that generated password. The generated password is never shown
-  in the dashboard: the email is the only way it reaches the member, which is
-  why the send has to happen inside the create action while the plaintext
-  still exists in memory. If it was never sent, an admin sets a fresh one with
-  the **New password** field on the update form, which leaves the existing
-  password alone when left blank.
+  When it is ticked the member receives an email (`sendWelcomeEmail` in
+  `lib/members.ts`) with their email address, that generated password, and
+  the steps for the first sign-in in the app, where they choose their own
+  password. The generated password is 12 characters with the look-alikes
+  (0 O o, 1 I l) left out, new for every member. It is never shown in the
+  dashboard: the email is the only way it reaches the member, which is why
+  the send has to happen inside the create action while the plaintext still
+  exists in memory. A failed send still creates the member and says so on the
+  next page; the member can then set a password with "Ξέχασες τον κωδικό;" in
+  the app, or an admin sets one with the **New password** field on the update
+  form, which leaves the existing password alone when left blank.
 - **Changing the password is optional.** A member may change it from the
   mobile app; nothing forces them to.
 - **A forgotten password is reset by an emailed code.** "Ξέχασες τον κωδικό;"
@@ -869,8 +873,9 @@ production uses.** SMTP covers both sane options with no code change: the
 mailbox the gym already sends mail from (Google Workspace, Fastmail, whatever
 it is) adds no new account; a transactional provider (Resend, Postmark, SES,
 all of which speak SMTP) costs an account but gives delivery logs and survives
-the mailbox password changing. The welcome email is still a TODO in
-`createMember`; it can now use `sendEmail`.
+the mailbox password changing. Production sends through Brevo as
+`no-reply@as-athlisis.gr`, with the domain's DKIM and DMARC records in
+Cloudflare.
 
 ---
 
@@ -967,11 +972,10 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
 2. **Done** - Schema + migration runner + connection manager + `/api/health`
 3. **Done** - **Auth**: login form wired, JWT session cookie, `proxy.ts` guard,
    `requireAdmin()`, login throttling, sign out
-4. **Mostly done** - **Members**: paginated list (20 a page) with live
+4. **Done** - **Members**: paginated list (20 a page) with live
    filtering, clickable rows, per-row view/update/delete actions, plus create
-   and update forms. Outstanding: the welcome email, which is blocked on the
-   transport decision in §10. Bookings need members to exist, so this comes
-   before the schedule.
+   and update forms and the welcome email (§10). Bookings need members to
+   exist, so this comes before the schedule.
 5. **Done** - **Bookings.** The week schedule with "copy last week"; the booking
    service in `lib/bookings.ts` - capacity, entitlement resolution, the unpaid
    membership, one class a day, cancellation, moving and voiding - checked by

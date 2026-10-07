@@ -3,6 +3,7 @@ import "server-only";
 import type { Role } from "@/lib/auth";
 import type { Queryable } from "@/lib/bookings";
 import { db, greekFold, likeLiteral } from "@/lib/db";
+import { sendEmail } from "@/lib/email";
 import { issueCode, spendCode } from "@/lib/email-codes";
 import { todayInGym } from "@/lib/gym-time";
 import { verifyPassword } from "@/lib/password";
@@ -228,6 +229,35 @@ async function emailTaken(runner: Queryable, email: string, exceptId: number) {
     [email, exceptId],
   );
   return rowCount !== 0;
+}
+
+/**
+ * Emails a new member their login and the generated password, with the steps
+ * for the first sign-in in the app, where they choose their own password.
+ */
+export function sendWelcomeEmail(to: string, firstName: string, password: string) {
+  const gym = process.env.GYM_NAME ?? "";
+  return sendEmail(
+    to,
+    `Καλώς ήρθες στο ${gym}`,
+    [
+      `Γεια σου ${firstName},`,
+      "",
+      `Ο λογαριασμός σου στο ${gym} είναι έτοιμος. Με αυτόν κλείνεις θέση στα μαθήματα από την εφαρμογή.`,
+      "",
+      `Email: ${to}`,
+      `Προσωρινός κωδικός: ${password}`,
+      "",
+      "Η πρώτη σου σύνδεση:",
+      "1. Άνοιξε την εφαρμογή και συνδέσου με το email σου και τον προσωρινό κωδικό.",
+      "2. Η εφαρμογή θα σου ζητήσει να διαλέξεις τον δικό σου κωδικό. Ο προσωρινός ισχύει μόνο για αυτή την πρώτη σύνδεση.",
+      "3. Από εκεί και πέρα συνδέεσαι με το email σου και τον κωδικό που διάλεξες.",
+      "",
+      "Αν ξεχάσεις τον κωδικό σου, πάτησε «Ξέχασες τον κωδικό;» στην οθόνη σύνδεσης και θα σου στείλουμε κωδικό με email για να ορίσεις νέο.",
+      "",
+      gym,
+    ].join("\n"),
+  );
 }
 
 export async function listAllMembers(): Promise<Member[]> {

@@ -47,6 +47,16 @@ export function Toaster() {
   );
 }
 
+/** The wording for each note lib/flash.ts can leave. */
+const FLASHES: Record<string, () => void> = {
+  saved: () => toast.info("Αποθηκεύτηκε."),
+  "welcome-sent": () => toast.info("Αποθηκεύτηκε. Στάλθηκε email καλωσορίσματος."),
+  "welcome-failed": () =>
+    toast.error(
+      "Το μέλος αποθηκεύτηκε, αλλά το email καλωσορίσματος δεν στάλθηκε. Μπορεί να ορίσει κωδικό από την εφαρμογή με το «Ξέχασες τον κωδικό;».",
+    ),
+};
+
 /**
  * "Αποθηκεύτηκε" once, on the page a form's save redirected to. The action
  * sets a short-lived cookie before redirecting (lib/flash.ts); this reads it
@@ -55,9 +65,13 @@ export function Toaster() {
 export function FlashToast() {
   const pathname = usePathname();
   useEffect(() => {
-    if (!document.cookie.split("; ").includes("flash=saved")) return;
+    const note = document.cookie
+      .split("; ")
+      .find((c) => c.startsWith("flash="))
+      ?.slice("flash=".length);
+    if (!note || !FLASHES[note]) return;
     document.cookie = "flash=; path=/; max-age=0";
-    toast.info("Αποθηκεύτηκε.");
+    FLASHES[note]();
   }, [pathname]);
   return null;
 }

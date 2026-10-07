@@ -5,10 +5,11 @@ import { redirect } from "next/navigation";
 
 import { endsSessions, type Session } from "@/lib/auth";
 import { db, hasPgCode } from "@/lib/db";
-import { redirectSaved } from "@/lib/flash";
+import { redirectSaved, type Flash } from "@/lib/flash";
 import {
   memberFieldsProblem,
   parseMemberFields,
+  sendWelcomeEmail,
   type MemberFields,
 } from "@/lib/members";
 import { countMemberships, hasCoverageToday } from "@/lib/memberships";
@@ -43,7 +44,7 @@ export async function createMember(
   if (invalid) return invalid;
 
   const isAdmin = f.role === "admin";
-  const sendWelcomeEmail =
+  const welcome =
     !isAdmin && formData.get("send_welcome_email") !== null;
 
   // A member gets a generated password and replaces it on their first login.
@@ -84,13 +85,20 @@ export async function createMember(
     throw err;
   }
 
-  if (sendWelcomeEmail) {
-    // TODO: send `password` to f.email once a transport is chosen (spec §10).
-    // It has to happen here: the plaintext exists only inside this function.
+  // The plaintext exists only inside this function, so the send happens here.
+  let flash: Flash = "saved";
+  if (welcome) {
+    try {
+      await sendWelcomeEmail(f.email, f.firstName, password);
+      flash = "welcome-sent";
+    } catch (err) {
+      console.error("welcome email failed", err);
+      flash = "welcome-failed";
+    }
   }
 
   revalidatePath("/members");
-  await redirectSaved(`/members/${memberId}`);
+  await redirectSaved(`/members/${memberId}`, flash);
 }
 
 /**

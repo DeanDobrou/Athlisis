@@ -1,5 +1,6 @@
 import {
   randomBytes,
+  randomInt,
   scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto";
@@ -61,9 +62,12 @@ export async function hashPassword(password: string): Promise<string> {
   ].join(":");
 }
 
-/** 12 base64url characters, ~72 bits. For staff-generated member passwords. */
+/** Letters and digits with the look-alikes (0 O o, 1 I l) taken out, so a password copied by eye is typed right. */
+const READABLE = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+
+/** 12 readable characters, ~68 bits, new for every member. For staff-generated member passwords. */
 export function generatePassword(): string {
-  return randomBytes(9).toString("base64url");
+  return Array.from({ length: 12 }, () => READABLE[randomInt(READABLE.length)]).join("");
 }
 
 export async function verifyPassword(
@@ -116,6 +120,12 @@ if ((import.meta as { main?: boolean }).main) {
       "same password must hash differently - salt is not random",
     );
     check(!(await verifyPassword(pw, "garbage")), "malformed hash must fail");
+    const generated = generatePassword();
+    check(
+      /^[A-HJ-NP-Za-km-np-z2-9]{12}$/.test(generated),
+      "a generated password is 12 readable characters, no look-alikes",
+    );
+    check(generated !== generatePassword(), "every generated password is new");
     check(
       !(await verifyPassword(pw, `scrypt:${N}:${R}:${P}:abc:def`)),
       "short key must fail",
