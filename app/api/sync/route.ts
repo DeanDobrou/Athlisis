@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import { requireUser } from "@/lib/auth";
 import { memberSchedule } from "@/lib/class-sessions";
+import { getMember } from "@/lib/members";
+import { memberMemberships } from "@/lib/memberships";
 
 /**
  * Everything the app shows, rebuilt on each request. Answers 304 with no body
@@ -13,9 +15,12 @@ export async function GET(request: Request) {
     return Response.json({ error: "Απαιτείται σύνδεση." }, { status: 401 });
   }
 
-  const body = JSON.stringify({
-    classes: await memberSchedule(session.userId),
-  });
+  const [classes, memberships, profile] = await Promise.all([
+    memberSchedule(session.userId),
+    memberMemberships(session.userId),
+    getMember(String(session.userId)),
+  ]);
+  const body = JSON.stringify({ classes, memberships, profile });
   const etag = `"${createHash("sha256").update(body).digest("base64url")}"`;
   const headers = { ETag: etag, "Cache-Control": "private, no-cache" };
 

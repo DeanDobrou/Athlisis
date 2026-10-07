@@ -225,6 +225,44 @@ export async function hasCoverageToday(userId: number): Promise<boolean> {
   return rows[0].covered;
 }
 
+export type MemberMembership = {
+  id: string;
+  plan_name: string;
+  starts_on: string;
+  ends_on: string | null;
+  visits_remaining: number | null;
+  owed_cents: number | null;
+  state: MembershipState;
+};
+
+/**
+ * A member's own memberships as their phone shows them: a period not yet
+ * over, a pack with visits left, and anything still owed. Ended periods,
+ * used-up packs and inactive rows are left out.
+ */
+export async function memberMemberships(
+  userId: number,
+  runner: Queryable = db(),
+): Promise<MemberMembership[]> {
+  const { rows } = await runner.query<MemberMembership>(
+    `SELECT m.id, p.name AS plan_name,
+            to_char(m.starts_on, 'YYYY-MM-DD') AS starts_on,
+            to_char(m.ends_on, 'YYYY-MM-DD') AS ends_on,
+            m.visits_remaining,
+            CASE WHEN m.paid_on IS NULL THEN m.amount_cents END AS owed_cents,
+            ${membershipState()} AS state
+     FROM memberships m
+     JOIN plans p ON p.id = m.plan_id
+     WHERE m.user_id = $1 AND m.status = 'active'
+       AND (m.paid_on IS NULL
+            OR m.ends_on >= current_date
+            OR (m.ends_on IS NULL AND m.visits_remaining IS DISTINCT FROM 0))
+     ORDER BY m.starts_on, m.id`,
+    [userId],
+  );
+  return rows;
+}
+
 export const PAGE_SIZE = 20;
 
 export type MembershipFilter = {

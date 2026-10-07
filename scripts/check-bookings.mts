@@ -22,7 +22,7 @@ const {
 const { listWeekBookings, memberSchedule } = await import(
   "@/lib/class-sessions"
 );
-const { findOverlap } = await import("@/lib/memberships");
+const { findOverlap, memberMemberships } = await import("@/lib/memberships");
 
 await run(async () => {
   const user = (tag: string) =>
@@ -657,6 +657,41 @@ await run(async () => {
     check(
       !json.includes("Nikos") && !json.includes("sched-b"),
       "staff notes and other members' names never reach the phone",
+    );
+  }
+
+  // ----- a member's own memberships on the phone ----------------------
+  {
+    const u = await user("own-memberships");
+    const upcoming = await unlimitedMarch(u);
+    const emptyMonth = await membership(u, month12, 0, "2020-01-01", "2031-12-31");
+    const usedUp = await membership(u, pack5, 0, "2020-01-01");
+    const ended = await membership(u, month12, 3, "2020-01-01", "2020-02-01");
+    const owed = await newId(
+      `INSERT INTO memberships
+         (user_id, plan_id, starts_on, ends_on, visits_remaining, amount_cents)
+       VALUES ($1, $2, '2020-01-01', '2020-02-01', 0, 6000) RETURNING id`,
+      [u, month12],
+    );
+    await membership(await user("own-memberships-other"), pack5, 5, "2020-01-01");
+
+    const mine = await memberMemberships(u, client);
+    const has = (id: number) => mine.find((m) => Number(m.id) === id);
+    check(
+      Boolean(has(upcoming)) && Boolean(has(emptyMonth)),
+      "a member sees a period not yet over, even with no visits left",
+    );
+    check(
+      !has(usedUp) && !has(ended),
+      "but not a used-up pack or a period that has ended",
+    );
+    check(
+      has(owed)?.owed_cents === 6000 && has(owed)?.state === "unpaid",
+      "an unpaid one stays, with what is owed, even after it ended",
+    );
+    check(
+      mine.length === 3 && has(upcoming)?.owed_cents === null,
+      "a paid one owes nothing, and another member's never shows",
     );
   }
 
