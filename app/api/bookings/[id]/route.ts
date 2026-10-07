@@ -29,6 +29,6 @@ export async function DELETE(
   if (result.unpaidLeftCents === null) return Response.json({ ok: true });
   return Response.json({
     ok: true,
-    notice: `Η κράτηση ακυρώθηκε. Χρωστάς ακόμη ${formatMoney(result.unpaidLeftCents)} για τη συνδρομή σου, οπότε νέα κράτηση γίνεται αφού πληρώσεις ή μιλήσεις με τη γραμματεία.`,
+    notice: `Η κράτηση ακυρώθηκε. Χρωστάς ακόμη ${formatMoney(result.unpaidLeftCents)} για τη συνδρομή σου, οπότε νέα κράτηση γίνεται αφού την πληρώσεις.`,
   });
 }
