@@ -14,5 +14,14 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  # Catches every email sent in development. Read them at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit
+    container_name: crossfit-gym-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
 volumes:
   pgdata:

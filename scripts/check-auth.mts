@@ -8,11 +8,15 @@ const {
   authenticate,
   changePassword,
   endsSessions,
+  issuePasswordReset,
   mintSetPasswordToken,
   mintToken,
   requireUser,
+  resetPassword,
   setFirstPassword,
 } = await import("@/lib/auth");
+const { confirmEmailChange, issueEmailChange, memberFieldsProblem, parseMemberFields } =
+  await import("@/lib/members");
 const { hashPassword } = await import("@/lib/password");
 const { SignJWT } = await import("jose");
 
@@ -296,4 +300,99 @@ await run(async () => {
     (await set(await mintSetPasswordToken(current), "Another passw0rd!")).ok,
     "while a fresh one for the same account still works",
   );
+
+  // ----- a forgotten password, reset with an emailed code ---------------
+  {
+    const issue = (address: string) => issuePasswordReset(address, client);
+    check(
+      (await issue("nobody@test.local")) === null && (await issue(email("gone"))) === null,
+      "no code for an address with no account, or an inactive one",
+    );
+
+    const forgetful = await user("forgetful", "member");
+    const earlier = await issue(email("forgetful").toUpperCase());
+    const fresh = await issue(email("forgetful"));
+    check(fresh?.email === email("forgetful"), "an active account gets a code at its own address");
+    const reset = (tag: string, code: string, next = "Fresh passw0rd!") =>
+      resetPassword(client, email(tag), code, next);
+    if (earlier && fresh && earlier.code !== fresh.code) {
+      check(!(await reset("forgetful", earlier.code)).ok, "asking again replaces the earlier code");
+  }
+  const weak = await reset("forgetful", fresh!.code, "short");
+  check(
+    !weak.ok && weak.error.includes("χαρακτήρες"),
+    "a weak new password is refused before the code is spent",
+  );
+  check(!(await reset("forgetful", "000000x")).ok, "a wrong code is refused");
+  const done = await reset("forgetful", ` ${fresh!.code} `);
+  check(done.ok, "the right code sets the new password, spaces and all");
+  check(
+    (await login("forgetful", "Fresh passw0rd!"))?.userId === forgetful &&
+      (await login("forgetful", password)) === null,
+    "the new password logs in and the old one no longer does",
+  );
+  check(
+    done.ok && (await gate(`Bearer ${done.token}`))?.userId === forgetful,
+    "and the reset signs the member in",
+  );
+  check(!(await reset("forgetful", fresh!.code)).ok, "a code works only once");
+
+  await user("guesser", "member");
+  const guessed = await issue(email("guesser"));
+  for (let i = 0; i < 5; i++) await reset("guesser", "wrong!");
+  check(
+    !(await reset("guesser", guessed!.code)).ok,
+    "after five wrong guesses even the right code is refused",
+  );
+
+  await user("late", "member");
+  const expiring = await issue(email("late"));
+  await client.query(
+    "UPDATE email_codes SET expires_at = now() - interval '1 minute' WHERE email = $1",
+    [email("late")],
+  );
+  check(!(await reset("late", expiring!.code)).ok, "an expired code is refused");
+
+  }
+
+  // ----- a member editing their own details ------------------------------
+  {
+    const fields = (overrides: Record<string, string>) =>
+      parseMemberFields((key) => ({
+        first_name: "Maria",
+        last_name: "Papa",
+        email: "maria@test.local",
+        ...overrides,
+      })[key] ?? "");
+    check(memberFieldsProblem(fields({ date_of_birth: "1990-05-17" })) === null, "a real birth date passes");
+    check(
+      memberFieldsProblem(fields({ date_of_birth: "1990-02-30" }))?.field === "date_of_birth" &&
+        memberFieldsProblem(fields({ date_of_birth: "2999-01-01" }))?.field === "date_of_birth",
+      "an impossible or future birth date is refused",
+    );
+    check(memberFieldsProblem(fields({ first_name: " " }))?.field === "first_name", "a name is required");
+
+    const mover = await user("mover", "member");
+    const change = (address: string, pw = password) =>
+      issueEmailChange(client, mover, address, pw);
+    check(!(await change(email("new-mover"), "wrong")).ok, "changing email needs the current password");
+    check(!(await change(email("member"))).ok, "an address another account uses is refused");
+    check(!(await change(email("mover").toUpperCase())).ok, "the current address is refused");
+    check(!(await change("not-an-email")).ok, "a malformed address is refused");
+
+    const asked = await change(` ${email("New-Mover")} `);
+    check(asked.ok && asked.email === email("new-mover"), "a new address gets a code, lowercased");
+    const confirm = (code: string) => confirmEmailChange(client, mover, code);
+    check(
+      !(await confirm("000000x")).ok &&
+        (await login("mover", password))?.userId === mover,
+      "a wrong code changes nothing",
+    );
+    check(asked.ok && (await confirm(asked.code)).ok, "the right code confirms the change");
+    check(
+      (await login("new-mover", password))?.userId === mover &&
+        (await login("mover", password)) === null,
+      "the member now logs in with the new address only",
+    );
+  }
 });

@@ -6,6 +6,11 @@ import { redirect } from "next/navigation";
 import { endsSessions, type Session } from "@/lib/auth";
 import { db, hasPgCode } from "@/lib/db";
 import { redirectSaved } from "@/lib/flash";
+import {
+  memberFieldsProblem,
+  parseMemberFields,
+  type MemberFields,
+} from "@/lib/members";
 import { countMemberships, hasCoverageToday } from "@/lib/memberships";
 import {
   generatePassword,
@@ -18,28 +23,11 @@ import { parseId } from "@/lib/utils";
 export type MemberFormState = { error: string; field?: string } | undefined;
 
 
-type Fields = ReturnType<typeof parseFields>;
+type Fields = MemberFields;
 
-function parseFields(formData: FormData) {
-  const get = (key: string) => String(formData.get(key) ?? "").trim();
-  return {
-    firstName: get("first_name").slice(0, 100),
-    lastName: get("last_name").slice(0, 100),
-    email: get("email").toLowerCase().slice(0, 255),
-    phone: get("phone").slice(0, 30) || null,
-    dateOfBirth: get("date_of_birth") || null,
-    role: get("role") === "admin" ? "admin" : "member",
-  };
-}
-
-function validate(f: Fields): { field: string; error: string } | null {
-  if (!f.firstName) return { field: "first_name", error: "Το όνομα είναι υποχρεωτικό." };
-  if (!f.lastName) return { field: "last_name", error: "Το επώνυμο είναι υποχρεωτικό." };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) {
-    return { field: "email", error: "Δώσε έγκυρη διεύθυνση email." };
-  }
-  return null;
-}
+const parseFields = (formData: FormData) =>
+  parseMemberFields((key) => String(formData.get(key) ?? ""));
+const validate = memberFieldsProblem;
 
 const isDuplicateEmail = (err: unknown) => hasPgCode(err, "23505");
 const isStillReferenced = (err: unknown) => hasPgCode(err, "23503");

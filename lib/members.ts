@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { Role } from "@/lib/auth";
+import type { Queryable } from "@/lib/bookings";
 import { db, greekFold, likeLiteral } from "@/lib/db";
+import { issueCode, spendCode } from "@/lib/email-codes";
+import { todayInGym } from "@/lib/gym-time";
+import { verifyPassword } from "@/lib/password";
 import { parseId } from "@/lib/utils";
 
 export type MemberStatus = "active" | "inactive";
@@ -108,6 +112,122 @@ export async function getMember(rawId: string): Promise<Member | null> {
     [id],
   );
   return rows[0] ?? null;
+}
+
+export type MemberFields = ReturnType<typeof parseMemberFields>;
+
+/** A member's details as typed, trimmed and capped to their columns. */
+export function parseMemberFields(get: (key: string) => string) {
+  const value = (key: string) => get(key).trim();
+  return {
+    firstName: value("first_name").slice(0, 100),
+    lastName: value("last_name").slice(0, 100),
+    email: value("email").toLowerCase().slice(0, 255),
+    phone: value("phone").slice(0, 30) || null,
+    dateOfBirth: value("date_of_birth") || null,
+    role: value("role") === "admin" ? "admin" : "member",
+  };
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** The first problem with a member's details, naming the field, or null. */
+export function memberFieldsProblem(
+  f: MemberFields,
+): { field: string; error: string } | null {
+  if (!f.firstName) return { field: "first_name", error: "Το όνομα είναι υποχρεωτικό." };
+  if (!f.lastName) return { field: "last_name", error: "Το επώνυμο είναι υποχρεωτικό." };
+  if (!EMAIL.test(f.email)) {
+    return { field: "email", error: "Δώσε έγκυρη διεύθυνση email." };
+  }
+  if (f.dateOfBirth && !isPastDate(f.dateOfBirth)) {
+    return { field: "date_of_birth", error: "Δώσε έγκυρη ημερομηνία γέννησης." };
+  }
+  return null;
+}
+
+/** Whether a YYYY-MM-DD string is a real calendar date before today. */
+function isPastDate(day: string): boolean {
+  const date = new Date(`${day}T00:00:00Z`);
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(day) &&
+    !Number.isNaN(date.getTime()) &&
+    date.toISOString().slice(0, 10) === day &&
+    day < todayInGym()
+  );
+}
+
+/** Saves the details members edit themselves. Email changes through a confirmed code instead. */
+export async function updateOwnDetails(
+  userId: number,
+  f: MemberFields,
+): Promise<void> {
+  await db().query(
+    `UPDATE users SET first_name = $1, last_name = $2, phone = $3,
+       date_of_birth = $4
+     WHERE id = $5`,
+    [f.firstName, f.lastName, f.phone, f.dateOfBirth, userId],
+  );
+}
+
+const EMAIL_TAKEN = "Αυτό το email χρησιμοποιείται ήδη.";
+
+/**
+ * Checks the current password and the new address, then issues a code to
+ * confirm the address with. The account keeps its old email until the code
+ * comes back.
+ */
+export async function issueEmailChange(
+  runner: Queryable,
+  userId: number,
+  newEmail: string,
+  password: string,
+): Promise<{ ok: true; email: string; code: string } | { ok: false; error: string }> {
+  const email = newEmail.trim().toLowerCase();
+  if (!EMAIL.test(email) || email.length > 255) {
+    return { ok: false, error: "Δώσε έγκυρη διεύθυνση email." };
+  }
+
+  const { rows } = await runner.query<{ email: string; password_hash: string }>(
+    "SELECT email, password_hash FROM users WHERE id = $1",
+    [userId],
+  );
+  if (!rows[0] || !(await verifyPassword(password, rows[0].password_hash))) {
+    return { ok: false, error: "Ο κωδικός είναι λάθος." };
+  }
+  if (rows[0].email.toLowerCase() === email) {
+    return { ok: false, error: "Αυτό είναι ήδη το email σου." };
+  }
+  if (await emailTaken(runner, email, userId)) return { ok: false, error: EMAIL_TAKEN };
+
+  return { ok: true, email, code: await issueCode(runner, userId, "email_change", email) };
+}
+
+/**
+ * Switches the account to the address a code was sent to, once the code
+ * matches. Runs inside a transaction that commits a refusal too, so wrong
+ * guesses are counted.
+ */
+export async function confirmEmailChange(
+  client: Queryable,
+  userId: number,
+  code: string,
+): Promise<{ ok: true; email: string } | { ok: false; error: string }> {
+  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
+  const email = await spendCode(client, userId, "email_change", code);
+  if (email === null) return { ok: false, error: "Ο κωδικός είναι λάθος ή έχει λήξει." };
+  if (await emailTaken(client, email, userId)) return { ok: false, error: EMAIL_TAKEN };
+
+  await client.query("UPDATE users SET email = $1 WHERE id = $2", [email, userId]);
+  return { ok: true, email };
+}
+
+async function emailTaken(runner: Queryable, email: string, exceptId: number) {
+  const { rowCount } = await runner.query(
+    "SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2",
+    [email, exceptId],
+  );
+  return rowCount !== 0;
 }
 
 export async function listAllMembers(): Promise<Member[]> {

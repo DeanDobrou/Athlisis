@@ -6,6 +6,7 @@ import { SignJWT, jwtVerify } from "jose";
 
 import type { Queryable } from "@/lib/bookings";
 import { db } from "@/lib/db";
+import { issueCode, spendCode } from "@/lib/email-codes";
 import {
   hashPassword,
   passwordProblem,
@@ -263,6 +264,65 @@ export async function setFirstPassword(
     userId,
     role: rows[0].role,
     tokenVersion: rows[0].token_version,
+  });
+  return { ok: true, token };
+}
+
+/**
+ * Issues a code for setting a new password, and returns the address to email
+ * it to. An address with no active account gets null, and the caller must
+ * answer exactly as it does for one that has.
+ */
+export async function issuePasswordReset(
+  email: string,
+  runner: Queryable = db(),
+): Promise<{ email: string; code: string } | null> {
+  const { rows } = await runner.query<{ id: string; email: string }>(
+    "SELECT id, email FROM users WHERE lower(email) = $1 AND status = 'active'",
+    [email.trim().toLowerCase()],
+  );
+  const user = rows[0];
+  if (!user) return null;
+  const code = await issueCode(runner, Number(user.id), "password_reset", user.email);
+  return { email: user.email, code };
+}
+
+/**
+ * Sets a new password with an emailed code and returns a token, signing every
+ * other device out. A wrong, expired or exhausted code is refused exactly like
+ * an address with no account. Runs inside a transaction that commits a refusal
+ * too, so wrong guesses are counted.
+ */
+export async function resetPassword(
+  client: Queryable,
+  email: string,
+  code: string,
+  next: string,
+): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+  const problem = passwordProblem(next);
+  if (problem) return { ok: false, error: problem };
+
+  const { rows } = await client.query<{ id: string }>(
+    `SELECT id FROM users WHERE lower(email) = $1 AND status = 'active'
+     FOR UPDATE`,
+    [email.trim().toLowerCase()],
+  );
+  const userId = Number(rows[0]?.id);
+  if (!rows[0] || (await spendCode(client, userId, "password_reset", code)) === null) {
+    return { ok: false, error: "Ο κωδικός είναι λάθος ή έχει λήξει." };
+  }
+
+  const { rows: saved } = await client.query<{ role: Role; token_version: number }>(
+    `UPDATE users SET password_hash = $1, must_change_password = false,
+       token_version = token_version + 1
+     WHERE id = $2
+     RETURNING role, token_version`,
+    [await hashPassword(next), userId],
+  );
+  const token = await mintToken({
+    userId,
+    role: saved[0].role,
+    tokenVersion: saved[0].token_version,
   });
   return { ok: true, token };
 }

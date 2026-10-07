@@ -813,6 +813,20 @@ login form.
   password alone when left blank.
 - **Changing the password is optional.** A member may change it from the
   mobile app; nothing forces them to.
+- **A forgotten password is reset by an emailed code.** "Ξέχασες τον κωδικό;"
+  on the app's sign-in screen asks for the email, `POST
+  /api/auth/forgot-password` emails a six-digit code, and `POST
+  /api/auth/reset-password` takes the code and a new password and signs the
+  member in, signing every other device out. The reply is the same for an
+  address with no account. A code works for 15 minutes, survives five wrong
+  guesses, works once, and asking again replaces it. Only its hash is stored,
+  in `email_codes` (`007`).
+- **Members edit their own details in the app**: name, phone and date of
+  birth save directly (`PATCH /api/user-profile`). The email changes only
+  after confirming it: the member gives the new address and their current
+  password, a code goes to the new address, and the account switches when the
+  code comes back (`POST /api/user-profile/email` and `.../email/confirm`).
+  Until then the old address keeps working, so a typo cannot lock anyone out.
 
 **Deleting a member is a real delete, refused when it would destroy history.**
 Two guards, in this order:
@@ -844,17 +858,19 @@ Additive column, permitted by §6 rule 3.
 **What this needs: no schema change.** `users.password_hash` already exists,
 and the checkbox is a form option rather than stored state. Deliberately left
 out of the MVP: recording whether the welcome email was sent
-(`welcome_email_sent_at`), password-reset links, and email verification. All
-three are additive later; none is needed to open the doors.
+(`welcome_email_sent_at`). Additive later; not needed to open the doors.
 
-**Still open - the email transport.** Nothing in the stack sends email yet.
-Do not run a mail server on the VPS: deliverability is a full-time job and a
-fresh IP lands in spam. Two sane options, both a few lines of code. SMTP
-through the mailbox the gym already sends mail from (Google Workspace,
-Fastmail, whatever it is) via `nodemailer` adds no new account. A
-transactional provider (Resend, Postmark, SES) costs an API key but gives
-delivery logs and survives the mailbox password changing. Decide before the
-members screen ships.
+**The email transport is SMTP, through `nodemailer`** (`lib/email.ts`), set by
+`SMTP_URL` and `EMAIL_FROM`. Locally the `mailpit` service in
+`docker-compose.yml` catches every message (read them at
+http://localhost:8025). Do not run a mail server on the VPS: deliverability is
+a full-time job and a fresh IP lands in spam. **Still open - which provider
+production uses.** SMTP covers both sane options with no code change: the
+mailbox the gym already sends mail from (Google Workspace, Fastmail, whatever
+it is) adds no new account; a transactional provider (Resend, Postmark, SES,
+all of which speak SMTP) costs an account but gives delivery logs and survives
+the mailbox password changing. The welcome email is still a TODO in
+`createMember`; it can now use `sendEmail`.
 
 ---
 
