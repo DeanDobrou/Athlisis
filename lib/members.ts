@@ -3,10 +3,10 @@ import "server-only";
 import type { Role } from "@/lib/auth";
 import type { Queryable } from "@/lib/bookings";
 import { db, greekFold, likeLiteral } from "@/lib/db";
-import { sendEmail } from "@/lib/email";
+import { gymName, sendEmail } from "@/lib/email";
 import { issueCode, spendCode } from "@/lib/email-codes";
 import { todayInGym } from "@/lib/gym-time";
-import { verifyPassword } from "@/lib/password";
+import { generatePassword, hashPassword, verifyPassword } from "@/lib/password";
 import { parseId } from "@/lib/utils";
 
 export type MemberStatus = "active" | "inactive";
@@ -236,7 +236,7 @@ async function emailTaken(runner: Queryable, email: string, exceptId: number) {
  * for the first sign-in in the app, where they choose their own password.
  */
 export function sendWelcomeEmail(to: string, firstName: string, password: string) {
-  const gym = process.env.GYM_NAME ?? "";
+  const gym = gymName();
   return sendEmail(
     to,
     `Καλώς ήρθες στο ${gym}`,
@@ -258,6 +258,23 @@ export function sendWelcomeEmail(to: string, firstName: string, password: string
       gym,
     ].join("\n"),
   );
+}
+
+/**
+ * Gives an active member a new generated password to change at their next
+ * sign-in, and ends their open sessions. Returns what the welcome email needs,
+ * or null for an admin or an inactive account.
+ */
+export async function issueTemporaryPassword(runner: Queryable, id: number) {
+  const password = generatePassword();
+  const { rows } = await runner.query<{ email: string; first_name: string }>(
+    `UPDATE users SET password_hash = $1, must_change_password = true,
+       token_version = token_version + 1
+     WHERE id = $2 AND role = 'member' AND status = 'active'
+     RETURNING email, first_name`,
+    [await hashPassword(password), id],
+  );
+  return rows[0] ? { ...rows[0], password } : null;
 }
 
 export async function listAllMembers(): Promise<Member[]> {

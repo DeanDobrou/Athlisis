@@ -807,7 +807,8 @@ login form.
   asked for, because an admin can already set any account's password, their
   own included, from the members screen.
 - **Members** are created by an admin on the members screen. The create form
-  generates a random password and carries a **Send welcome email** checkbox.
+  generates a random password and carries a **Send welcome email** checkbox,
+  ticked by default.
   When it is ticked the member receives an email (`sendWelcomeEmail` in
   `lib/members.ts`) with their email address, that generated password, and
   the steps for the first sign-in in the app, where they choose their own
@@ -816,9 +817,14 @@ login form.
   dashboard: the email is the only way it reaches the member, which is why
   the send has to happen inside the create action while the plaintext still
   exists in memory. A failed send still creates the member and says so on the
-  next page; the member can then set a password with "Ξέχασες τον κωδικό;" in
-  the app, or an admin sets one with the **New password** field on the update
-  form, which leaves the existing password alone when left blank.
+  next page.
+- **The welcome email can be sent again** from an active member's page, for a
+  failed send, a lost email, or a member created before the app existed. It
+  gives them a new generated password to change at sign-in and signs them out
+  everywhere, and the new password is kept only if the email went out
+  (`issueTemporaryPassword` in `lib/members.ts`). It sends the welcome email
+  rather than a reset code because a code expires in 15 minutes, usually
+  before the member has installed the app.
 - **Changing the password is optional.** A member may change it from the
   mobile app; nothing forces them to.
 - **A forgotten password is reset by an emailed code.** "Ξέχασες τον κωδικό;"

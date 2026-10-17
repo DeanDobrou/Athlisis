@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 
 import type { Queryable } from "@/lib/bookings";
-import { sendEmail } from "@/lib/email";
+import { gymName, sendEmail } from "@/lib/email";
 
 export type CodePurpose = "password_reset" | "email_change";
 
@@ -83,7 +83,7 @@ const REASONS: Record<CodePurpose, string> = {
 
 /** Emails a code, saying what it is for and how long it works. */
 export function sendCode(to: string, purpose: CodePurpose, code: string) {
-  const gym = process.env.GYM_NAME ?? "";
+  const gym = gymName();
   return sendEmail(
     to,
     `${gym} - ${SUBJECTS[purpose]}`,

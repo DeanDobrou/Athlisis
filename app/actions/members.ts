@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { endsSessions, type Session } from "@/lib/auth";
-import { db, hasPgCode } from "@/lib/db";
+import { db, hasPgCode, withTransaction } from "@/lib/db";
 import { redirectSaved, type Flash } from "@/lib/flash";
 import {
+  issueTemporaryPassword,
   memberFieldsProblem,
   parseMemberFields,
   sendWelcomeEmail,
@@ -99,6 +100,38 @@ export async function createMember(
 
   revalidatePath("/members");
   await redirectSaved(`/members/${memberId}`, flash);
+}
+
+/**
+ * Emails an existing member the welcome email with a new temporary password.
+ * The new password is kept only if the email went out.
+ */
+export async function resendWelcomeEmail(
+  rawId: string,
+): Promise<{ error?: string; message?: string }> {
+  await requireAdmin();
+
+  const id = parseId(rawId);
+  if (id === null) return { error: "Άγνωστο μέλος." };
+
+  try {
+    const sent = await withTransaction(async (client) => {
+      const issued = await issueTemporaryPassword(client, id);
+      if (issued) {
+        await sendWelcomeEmail(issued.email, issued.first_name, issued.password);
+      }
+      return issued !== null;
+    });
+    if (!sent) {
+      return { error: "Το email καλωσορίσματος στέλνεται μόνο σε ενεργά μέλη." };
+    }
+  } catch (err) {
+    console.error("welcome email failed", err);
+    return {
+      error: "Το email δεν στάλθηκε, οπότε ο κωδικός του μέλους δεν άλλαξε.",
+    };
+  }
+  return { message: "Στάλθηκε email καλωσορίσματος με νέο προσωρινό κωδικό." };
 }
 
 /**

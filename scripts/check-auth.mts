@@ -15,8 +15,13 @@ const {
   resetPassword,
   setFirstPassword,
 } = await import("@/lib/auth");
-const { confirmEmailChange, issueEmailChange, memberFieldsProblem, parseMemberFields } =
-  await import("@/lib/members");
+const {
+  confirmEmailChange,
+  issueEmailChange,
+  issueTemporaryPassword,
+  memberFieldsProblem,
+  parseMemberFields,
+} = await import("@/lib/members");
 const { hashPassword } = await import("@/lib/password");
 const { SignJWT } = await import("jose");
 
@@ -300,6 +305,30 @@ await run(async () => {
     (await set(await mintSetPasswordToken(current), "Another passw0rd!")).ok,
     "while a fresh one for the same account still works",
   );
+
+  // ----- staff sending the welcome email again ---------------------------
+  {
+    const invited = await user("invited", "member");
+    const before = (await login("invited", password))!;
+    const issued = await issueTemporaryPassword(client, invited);
+    check(issued?.email === email("invited"), "an active member gets a new temporary password");
+    check(
+      (await login("invited", password)) === null &&
+        (await login("invited", issued!.password))?.mustChangePassword === true,
+      "the old password stops working and the new one must be changed at sign-in",
+    );
+    check(
+      (await gate(`Bearer ${await mintToken(before)}`)) === null,
+      "and the member's open sessions end",
+    );
+    check(
+      (await issueTemporaryPassword(client, admin)) === null &&
+        (await login("admin", password))?.userId === admin,
+      "an admin is left alone",
+    );
+    const gone = await newId("SELECT id FROM users WHERE email = $1", [email("gone")]);
+    check((await issueTemporaryPassword(client, gone)) === null, "so is an inactive member");
+  }
 
   // ----- a forgotten password, reset with an emailed code ---------------
   {

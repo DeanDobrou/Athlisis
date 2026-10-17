@@ -4,6 +4,13 @@ import { createTransport, type Transporter } from "nodemailer";
 
 let transport: Transporter | null = null;
 
+/** The gym's name from GYM_NAME, for the text of an email. */
+export function gymName(): string {
+  const name = process.env.GYM_NAME?.trim();
+  if (!name) throw new Error("GYM_NAME must be set to send email");
+  return name;
+}
+
 /** Sends a plain-text email through the SMTP server in SMTP_URL. */
 export async function sendEmail(to: string, subject: string, text: string) {
   const url = process.env.SMTP_URL;

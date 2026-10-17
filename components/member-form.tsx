@@ -137,7 +137,11 @@ export function MemberForm({
             htmlFor="send_welcome_email"
             className="flex items-center gap-2"
           >
-            <Checkbox id="send_welcome_email" name="send_welcome_email" />
+            <Checkbox
+              id="send_welcome_email"
+              name="send_welcome_email"
+              defaultChecked
+            />
             Αποστολή email καλωσορίσματος
           </Label>
           <p className="text-muted-foreground text-xs">
