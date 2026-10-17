@@ -81,6 +81,12 @@ export function membershipState(alias = "m"): string {
   END`;
 }
 
+/** Whether a membership is over: its period has ended, or it is a pack with no visits left. */
+function finished(alias = "m"): string {
+  return `CASE WHEN ${alias}.ends_on IS NOT NULL THEN ${alias}.ends_on < current_date
+               ELSE ${alias}.visits_remaining IS NOT DISTINCT FROM 0 END`;
+}
+
 /**
  * The one definition of a membership period: 10 March runs to 10 April, the
  * same day of the next month. Postgres clamps the short months, so 31 January
@@ -254,13 +260,66 @@ export async function memberMemberships(
      FROM memberships m
      JOIN plans p ON p.id = m.plan_id
      WHERE m.user_id = $1 AND m.status = 'active'
-       AND (m.paid_on IS NULL
-            OR m.ends_on >= current_date
-            OR (m.ends_on IS NULL AND m.visits_remaining IS DISTINCT FROM 0))
+       AND (m.paid_on IS NULL OR NOT ${finished()})
      ORDER BY m.starts_on, m.id`,
     [userId],
   );
   return rows;
+}
+
+export type MemberPastMembership = {
+  id: string;
+  plan_name: string;
+  starts_on: string;
+  ends_on: string | null;
+  visits_remaining: number | null;
+  amount_cents: number;
+  method: PaymentMethod;
+  paid_on: string;
+};
+
+export const HISTORY_PAGE_SIZE = 20;
+
+/**
+ * A member's own past memberships for their phone, newest first: the paid
+ * ones memberMemberships() leaves out, so a period that has ended or a pack
+ * used up. An unpaid one stays in memberMemberships() until it is collected.
+ *
+ * Pages by keyset: pass the `next` of one page as `before` to get the page
+ * after it; `next` is null on the last page. Null for a `before` that is not
+ * a cursor this returned.
+ */
+export async function memberHistory(
+  userId: number,
+  before: string | null,
+  runner: Queryable = db(),
+  limit = HISTORY_PAGE_SIZE,
+): Promise<{ memberships: MemberPastMembership[]; next: string | null } | null> {
+  const cursor = before === null ? null : /^(\d{4}-\d{2}-\d{2})_(\d+)$/.exec(before);
+  if (before !== null && !cursor) return null;
+
+  const { rows } = await runner.query<MemberPastMembership>(
+    `SELECT m.id, p.name AS plan_name,
+            to_char(m.starts_on, 'YYYY-MM-DD') AS starts_on,
+            to_char(m.ends_on, 'YYYY-MM-DD') AS ends_on,
+            m.visits_remaining, m.amount_cents, m.method,
+            to_char(m.paid_on, 'YYYY-MM-DD') AS paid_on
+     FROM memberships m
+     JOIN plans p ON p.id = m.plan_id
+     WHERE m.user_id = $1 AND m.status = 'active'
+       AND m.paid_on IS NOT NULL AND ${finished()}
+       AND ($2::date IS NULL OR (m.starts_on, m.id) < ($2::date, $3::bigint))
+     ORDER BY m.starts_on DESC, m.id DESC
+     LIMIT $4`,
+    [userId, cursor?.[1] ?? null, cursor?.[2] ?? null, limit + 1],
+  );
+
+  const memberships = rows.slice(0, limit);
+  const last = memberships[memberships.length - 1];
+  return {
+    memberships,
+    next: rows.length > limit && last ? `${last.starts_on}_${last.id}` : null,
+  };
 }
 
 export const PAGE_SIZE = 20;

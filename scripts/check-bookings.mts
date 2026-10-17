@@ -22,7 +22,9 @@ const {
 const { listWeekBookings, memberSchedule, overlappingSession } = await import(
   "@/lib/class-sessions"
 );
-const { findOverlap, memberMemberships } = await import("@/lib/memberships");
+const { findOverlap, memberHistory, memberMemberships } = await import(
+  "@/lib/memberships"
+);
 
 await run(async () => {
   const user = (tag: string) =>
@@ -667,6 +669,7 @@ await run(async () => {
     const emptyMonth = await membership(u, month12, 0, "2020-01-01", "2031-12-31");
     const usedUp = await membership(u, pack5, 0, "2020-01-01");
     const ended = await membership(u, month12, 3, "2020-01-01", "2020-02-01");
+    const forever = await membership(u, unlimited, null, "2020-01-01");
     const owed = await newId(
       `INSERT INTO memberships
          (user_id, plan_id, starts_on, ends_on, visits_remaining, amount_cents)
@@ -681,6 +684,7 @@ await run(async () => {
       Boolean(has(upcoming)) && Boolean(has(emptyMonth)),
       "a member sees a period not yet over, even with no visits left",
     );
+    check(Boolean(has(forever)), "and a pass with no end and no visit count");
     check(
       !has(usedUp) && !has(ended),
       "but not a used-up pack or a period that has ended",
@@ -690,8 +694,31 @@ await run(async () => {
       "an unpaid one stays, with what is owed, even after it ended",
     );
     check(
-      mine.length === 3 && has(upcoming)?.owed_cents === null,
+      mine.length === 4 && has(upcoming)?.owed_cents === null,
       "a paid one owes nothing, and another member's never shows",
+    );
+
+    const past = await memberHistory(u, null, client);
+    const ids = past?.memberships.map((m) => Number(m.id)) ?? [];
+    check(
+      ids.length === 2 && ids.includes(usedUp) && ids.includes(ended),
+      "history holds exactly the paid ones the phone's list leaves out",
+    );
+    check(
+      past?.next === null && ids[0] === ended,
+      "newest first, ties by the later one, with no page after the last",
+    );
+    const first = await memberHistory(u, null, client, 1);
+    const second = first?.next ? await memberHistory(u, first.next, client, 1) : null;
+    check(
+      Number(first?.memberships[0]?.id) === ended &&
+        Number(second?.memberships[0]?.id) === usedUp &&
+        second?.next === null,
+      "history pages on, one cursor at a time",
+    );
+    check(
+      (await memberHistory(u, "not-a-cursor", client)) === null,
+      "a made-up cursor is refused",
     );
   }
 
