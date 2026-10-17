@@ -124,6 +124,30 @@ export async function listSessionsForWeek(
   return rows;
 }
 
+/**
+ * The times of a class on `day` that overlaps `start`-`end`, as "18:00-19:00",
+ * or null. Back-to-back is not an overlap. Cancelled classes count: they keep
+ * their place on the schedule until restored or deleted.
+ */
+export async function overlappingSession(
+  runner: Queryable,
+  day: string,
+  start: string,
+  end: string,
+  exceptId: number | null = null,
+): Promise<string | null> {
+  const { rows } = await runner.query<{ times: string }>(
+    `SELECT to_char(starts_at, 'HH24:MI') || '-' || to_char(ends_at, 'HH24:MI') AS times
+     FROM class_sessions
+     WHERE starts_at < $1::date + $3::time AND ends_at > $1::date + $2::time
+       AND id IS DISTINCT FROM $4::bigint
+     ORDER BY starts_at
+     LIMIT 1`,
+    [day, start, end, exceptId],
+  );
+  return rows[0]?.times ?? null;
+}
+
 export async function getSession(
   rawId: string,
 ): Promise<ClassSession | null> {

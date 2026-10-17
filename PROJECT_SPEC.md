@@ -578,7 +578,11 @@ QR codes.
 edit and copy classes. It knows about sessions, not people.
 
 `/bookings` (Κρατήσεις) is a **board**: rows are the gym's five fixed slots,
-columns are Monday to Friday, and each class shows its members right on it, so
+columns are Monday to Friday, and each class sits in the first slot it overlaps
+(`slotOf` in `lib/slots.ts`), so a class shifted off the usual times, say
+18:30-19:30, still shows. Two classes in one slot (17:00-17:30 and 17:30-18:00)
+show only the first, and a class outside every slot (07:00) does not show at
+all. Each class shows its members right on it, so
 staff never open a class to see who is coming. A class is titled with its time
 and its places as plain text - `18:30-19:30 6/8` - with the count read through
 `HOLDS_A_PLACE`, the same rule that refuses a booking. A member who owes money
@@ -1005,9 +1009,14 @@ editor SQL formatter reflows this file on save and mangles both otherwise.
   `class_sessions.coach_id` stays as "who is running this class", now pointing
   at an admin user.
 - **Session generation:** no template table. A "copy last week" generator
-  writes plain rows, is **idempotent** (skips a session that already exists at
-  the same start time and class type, so double-clicking cannot duplicate a
-  week), and **skips `closures`**.
+  writes plain rows, is **idempotent** (skips a class that would overlap one
+  already on that day, so double-clicking cannot duplicate a week), and
+  **skips `closures`**.
+- **Classes never overlap on a day.** Creating, editing, copying a class to
+  the next slot and copying last week all refuse or skip a time that overlaps
+  another class (`overlappingSession` in `lib/class-sessions.ts`, `nextFreeSlot`
+  in `lib/slots.ts`). Back-to-back is fine. A cancelled class still holds its
+  time, so the way to reuse it is to restore it.
 
 ### Still open
 

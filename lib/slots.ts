@@ -1,7 +1,7 @@
 /**
- * The fixed times the gym runs classes. These are the only times a class can
- * be scheduled at, which is what makes "copy to the next free slot" a question
- * with an answer.
+ * The fixed times the gym runs classes. A class can be set at any time; the
+ * bookings board and "copy to the next free slot" place it on the slots it
+ * overlaps.
  *
  * Client-safe: the form picks from these and the copy action reasons about
  * them, so neither side can drift from the other.
@@ -15,7 +15,7 @@ export const SLOTS: Slot[] = [
   { start: "17:00", end: "18:00" },
   { start: "18:00", end: "19:00" },
   { start: "19:00", end: "20:00" },
-  { start: "20:00", end: "21:00" },
+  { start: "20:15", end: "21:15" },
 ];
 
 export const DEFAULT_SLOT = SLOTS[1];
@@ -29,21 +29,29 @@ export function slotIndex(start: string): number {
   return SLOTS.findIndex((s) => s.start === start);
 }
 
+type Timed = { start_time: string; end_time: string };
+
+/** Whether a class overlaps a slot. Back-to-back is not an overlap. */
+const overlaps = (c: Timed, slot: Slot) =>
+  c.start_time < slot.end && c.end_time > slot.start;
+
+/** The slot a class sits in on the bookings board: the first one it overlaps. */
+export function slotOf(c: Timed): Slot | undefined {
+  return SLOTS.find((slot) => overlaps(c, slot));
+}
+
 /**
- * The next slot after `fromIndex` that nothing occupies, wrapping past the end
- * of the day so copying the last class of the evening still lands somewhere.
- * Null only when the day is genuinely full.
+ * The next slot after `fromIndex` that none of `classes` overlaps, wrapping
+ * past the end of the day so copying the last class of the evening still lands
+ * somewhere. Null only when the day is genuinely full.
  *
  * `fromIndex` of -1 means "no current slot", so the search starts at the top.
  */
-export function nextFreeSlot(
-  taken: ReadonlySet<string>,
-  fromIndex: number,
-): Slot | null {
+export function nextFreeSlot(classes: Timed[], fromIndex: number): Slot | null {
   const startAt = fromIndex < 0 ? 0 : fromIndex + 1;
   for (let step = 0; step < SLOTS.length; step += 1) {
     const slot = SLOTS[(startAt + step) % SLOTS.length];
-    if (!taken.has(slot.start)) return slot;
+    if (!classes.some((c) => overlaps(c, slot))) return slot;
   }
   return null;
 }
@@ -52,7 +60,10 @@ if ((import.meta as { main?: boolean }).main) {
   const check = (ok: boolean, msg: string) => {
     if (!ok) throw new Error(msg);
   };
-  const taken = (...starts: string[]) => new Set(starts);
+  const cls = (start_time: string, end_time: string) => ({ start_time, end_time });
+  // Classes that fill these slots exactly.
+  const taken = (...starts: string[]) =>
+    starts.map((s) => cls(s, SLOTS[slotIndex(s)].end));
 
   check(DEFAULT_SLOT.start === "17:00", "the evening class is the default");
   check(findSlot("17:00", "18:00") !== null, "a real slot is found");
@@ -75,12 +86,12 @@ if ((import.meta as { main?: boolean }).main) {
   // Copying the last class of the day wraps to the morning rather than
   // dead-ending while a slot is still free.
   check(
-    nextFreeSlot(taken("20:00"), slotIndex("20:00"))?.start === "10:00",
+    nextFreeSlot(taken("20:15"), slotIndex("20:15"))?.start === "10:00",
     "wraps past the end of the day",
   );
 
   check(
-    nextFreeSlot(taken("10:00", "17:00", "18:00", "19:00", "20:00"), 1) ===
+    nextFreeSlot(taken("10:00", "17:00", "18:00", "19:00", "20:15"), 1) ===
       null,
     "a full day has nowhere to copy to",
   );
@@ -92,7 +103,7 @@ if ((import.meta as { main?: boolean }).main) {
     "add skips taken evening slots",
   );
   check(
-    nextFreeSlot(taken("17:00", "18:00", "19:00", "20:00"), fromDefault)
+    nextFreeSlot(taken("17:00", "18:00", "19:00", "20:15"), fromDefault)
       ?.start === "10:00",
     "add falls back to the morning last",
   );
@@ -104,6 +115,26 @@ if ((import.meta as { main?: boolean }).main) {
   check(
     nextFreeSlot(taken("10:00"), -1)?.start === "17:00",
     "no current slot still skips a taken one",
+  );
+
+  check(slotOf(cls("18:00", "19:00"))?.start === "18:00", "a class sits in its own slot");
+  check(
+    slotOf(cls("20:00", "21:00"))?.start === "20:15",
+    "a class off the slot grid sits in the slot it overlaps",
+  );
+  check(
+    slotOf(cls("18:30", "19:30"))?.start === "18:00",
+    "a class straddling two slots sits in the first",
+  );
+  check(slotOf(cls("07:00", "08:00")) === undefined, "a class no slot overlaps sits nowhere");
+
+  check(
+    nextFreeSlot([cls("20:00", "21:00")], slotIndex("19:00"))?.start === "10:00",
+    "a class off the slot grid takes the slot it overlaps",
+  );
+  check(
+    nextFreeSlot([cls("18:30", "19:30")], slotIndex("17:00"))?.start === "20:15",
+    "a class straddling two slots takes both",
   );
 
   console.log("slots self-check passed");

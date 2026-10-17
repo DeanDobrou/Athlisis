@@ -12,7 +12,8 @@ import {
   isWeekend,
   TRAINING_DAYS,
 } from "@/lib/gym-time";
-import { nextFreeSlot, slotIndex } from "@/lib/slots";
+import { overlappingSession } from "@/lib/class-sessions";
+import { nextFreeSlot, slotOf, SLOTS } from "@/lib/slots";
 import { requireAdmin } from "@/lib/session";
 import { parseId } from "@/lib/utils";
 
@@ -82,6 +83,12 @@ function parseFields(
 const STARTS_AT = "($1::date + $2::time)";
 const ENDS_AT = "($1::date + $3::time)";
 
+/** The form error for a time another class on that day already uses. */
+const overlapError = (times: string) => ({
+  field: "start_time",
+  error: `Εκείνη την ημέρα υπάρχει ήδη μάθημα ${times}, που επικαλύπτεται με αυτή την ώρα.`,
+});
+
 export async function createSession(
   _prev: SessionFormState,
   formData: FormData,
@@ -91,7 +98,10 @@ export async function createSession(
   const f = parseFields(formData);
   if ("error" in f) return f;
 
-  await withTransaction(async (client) => {
+  const failed = await withTransaction(async (client): Promise<SessionFormState> => {
+    const taken = await overlappingSession(client, f.day, f.startTime, f.endTime);
+    if (taken) return overlapError(taken);
+
     const { rows } = await client.query<{ id: string }>(
       `INSERT INTO class_sessions
          (starts_at, ends_at, capacity, status, notes)
@@ -104,7 +114,9 @@ export async function createSession(
        SELECT $1, unnest($2::bigint[])`,
       [rows[0].id, f.typeIds],
     );
+    return undefined;
   });
+  if (failed) return failed;
 
   revalidatePath("/schedule");
   await redirectSaved(`/schedule?week=${f.day}`);
@@ -122,7 +134,10 @@ export async function updateSession(
   const f = parseFields(formData);
   if ("error" in f) return f;
 
-  const found = await withTransaction(async (client) => {
+  const failed = await withTransaction(async (client): Promise<SessionFormState> => {
+    const taken = await overlappingSession(client, f.day, f.startTime, f.endTime, id);
+    if (taken) return overlapError(taken);
+
     const { rowCount } = await client.query(
       `UPDATE class_sessions SET
          starts_at = ${STARTS_AT}, ends_at = ${ENDS_AT},
@@ -130,7 +145,7 @@ export async function updateSession(
        WHERE id = $6`,
       [f.day, f.startTime, f.endTime, f.capacity, f.notes, id],
     );
-    if (rowCount === 0) return false;
+    if (rowCount === 0) return { error: "Άγνωστο μάθημα." };
 
     await client.query(
       "DELETE FROM class_session_types WHERE class_session_id = $1",
@@ -141,9 +156,9 @@ export async function updateSession(
        SELECT $1, unnest($2::bigint[])`,
       [id, f.typeIds],
     );
-    return true;
+    return undefined;
   });
-  if (!found) return { error: "Άγνωστο μάθημα." };
+  if (failed) return failed;
 
   revalidatePath("/schedule");
   await redirectSaved(`/schedule?week=${f.day}`);
@@ -228,11 +243,13 @@ export async function copySession(
     const { rows: found } = await client.query<{
       day: string;
       start_time: string;
+      end_time: string;
       capacity: number;
       notes: string | null;
     }>(
       `SELECT to_char(starts_at, 'YYYY-MM-DD') AS day,
               to_char(starts_at, 'HH24:MI') AS start_time,
+              to_char(ends_at, 'HH24:MI') AS end_time,
               capacity, notes
        FROM class_sessions WHERE id = $1`,
       [id],
@@ -240,15 +257,19 @@ export async function copySession(
     if (found.length === 0) return { error: "Άγνωστο μάθημα." };
     const source = found[0];
 
-    const { rows: siblings } = await client.query<{ start_time: string }>(
-      `SELECT to_char(starts_at, 'HH24:MI') AS start_time
+    const { rows: siblings } = await client.query<{
+      start_time: string;
+      end_time: string;
+    }>(
+      `SELECT to_char(starts_at, 'HH24:MI') AS start_time,
+              to_char(ends_at, 'HH24:MI') AS end_time
        FROM class_sessions
        WHERE starts_at >= $1::date AND starts_at < $1::date + 1`,
       [source.day],
     );
 
-    const taken = new Set(siblings.map((s) => s.start_time));
-    const target = nextFreeSlot(taken, slotIndex(source.start_time));
+    const from = slotOf(source);
+    const target = nextFreeSlot(siblings, from ? SLOTS.indexOf(from) : -1);
     if (!target) {
       return { error: "Όλες οι ώρες είναι ήδη καλυμμένες για εκείνη την ημέρα." };
     }
@@ -277,8 +298,8 @@ export async function copySession(
 }
 
 /**
- * Fills a week from the one before it. Idempotent: a slot that already has a
- * class is left alone, so pressing it twice cannot duplicate a week.
+ * Fills a week from the one before it. Idempotent: a class that would overlap
+ * one already there is skipped, so pressing it twice cannot duplicate a week.
  *
  * Dates are shifted as YYYY-MM-DD strings and the wall-clock time re-applied,
  * so a class copied across the October clock change stays at 18:00. Postgres
@@ -316,22 +337,10 @@ export async function copyLastWeek(
       return { error: "Η προηγούμενη εβδομάδα δεν έχει μαθήματα για αντιγραφή." };
     }
 
-    const { rows: occupied } = await client.query<{
-      day: string;
-      start_time: string;
-    }>(
-      `SELECT to_char(starts_at, 'YYYY-MM-DD') AS day,
-              to_char(starts_at, 'HH24:MI') AS start_time
-       FROM class_sessions
-       WHERE starts_at >= $1::date AND starts_at < $1::date + $2::int`,
-      [week, TRAINING_DAYS],
-    );
-    const taken = new Set(occupied.map((o) => `${o.day} ${o.start_time}`));
-
     let added = 0;
     for (const s of source) {
       const day = addDays(s.day, 7);
-      if (taken.has(`${day} ${s.start_time}`)) continue;
+      if (await overlappingSession(client, day, s.start_time, s.end_time)) continue;
 
       const { rows: created } = await client.query<{ id: string }>(
         `INSERT INTO class_sessions

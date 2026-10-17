@@ -42,7 +42,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { ClassSession, WeekBooking } from "@/lib/class-sessions";
 import { formatDate, weekdayName } from "@/lib/gym-time";
-import { SLOTS } from "@/lib/slots";
+import { slotOf, SLOTS } from "@/lib/slots";
 import { attempt, cn, fold } from "@/lib/utils";
 
 type Member = { id: string; name: string };
@@ -247,7 +247,7 @@ export function BookingBoard({
               <Fragment key={slot.start}>
                 {days.map((day) => {
                   const cls = classes.find(
-                    (c) => c.day === day && c.start_time === slot.start,
+                    (c) => c.day === day && slotOf(c) === slot,
                   );
                   if (!cls) {
                     return (

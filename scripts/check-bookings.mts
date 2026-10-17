@@ -19,7 +19,7 @@ const {
   undoCheckIn,
   voidUnpaidMembership,
 } = await import("@/lib/bookings");
-const { listWeekBookings, memberSchedule } = await import(
+const { listWeekBookings, memberSchedule, overlappingSession } = await import(
   "@/lib/class-sessions"
 );
 const { findOverlap, memberMemberships } = await import("@/lib/memberships");
@@ -844,5 +844,29 @@ await run(async () => {
       !nosy.ok && nosy.error === "Άγνωστη κράτηση.",
       "a member cannot check in someone else",
     );
+  }
+
+  // ----- classes that clash on the schedule ----------------------------
+  {
+    const day = "2031-06-02";
+    const at = (start: string, end: string, status = "scheduled") =>
+      newId(
+        `INSERT INTO class_sessions (starts_at, ends_at, capacity, status)
+         VALUES ($1::date + $2::time, $1::date + $3::time, 8, $4) RETURNING id`,
+        [day, start, end, status],
+      );
+    const evening = await at("18:00", "19:00");
+    await at("20:00", "21:00", "cancelled");
+    const clash = (start: string, end: string, except: number | null = null) =>
+      overlappingSession(client, day, start, end, except);
+
+    check((await clash("18:30", "19:30")) === "18:00-19:00", "a class that overlaps another is found");
+    check(
+      (await clash("19:00", "20:00")) === null && (await clash("17:00", "18:00")) === null,
+      "back to back is not an overlap",
+    );
+    check((await clash("18:00", "19:00", evening)) === null, "a class does not clash with itself when edited");
+    check((await clash("20:15", "21:15")) === "20:00-21:00", "a cancelled class still holds its time");
+    check((await overlappingSession(client, "2031-06-03", "18:00", "19:00")) === null, "another day is free");
   }
 });

@@ -88,10 +88,7 @@ export default async function SchedulePage({
         {days.map((day) => {
           const dayed = byDay.get(day) ?? [];
           const isToday = day === today;
-          const freeSlot = nextFreeSlot(
-            new Set(dayed.map((s) => s.start_time)),
-            slotIndex(DEFAULT_SLOT.start) - 1,
-          );
+          const freeSlot = nextFreeSlot(dayed, slotIndex(DEFAULT_SLOT.start) - 1);
           return (
             <Card
               key={day}
