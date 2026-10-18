@@ -845,8 +845,8 @@ login form.
 **Deleting a member is a real delete, refused when it would destroy history.**
 Two guards, in this order:
 
-1. **An active membership blocks it** - checked explicitly so the message can
-   say so: end the membership first.
+1. **Any membership blocks it**, current or ended - checked explicitly so the
+   message can say what to do: make the member inactive instead.
 2. **Anything else that references the row blocks it too.** Five foreign keys
    point at `users` (`bookings`, `memberships` twice - as the member and as
    `recorded_by`, the admin who took the money - `class_sessions.coach_id`,

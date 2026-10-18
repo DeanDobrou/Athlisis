@@ -13,7 +13,7 @@ import {
   sendWelcomeEmail,
   type MemberFields,
 } from "@/lib/members";
-import { countMemberships, hasCoverageToday } from "@/lib/memberships";
+import { countMemberships } from "@/lib/memberships";
 import {
   generatePassword,
   hashPassword,
@@ -267,16 +267,10 @@ export async function deleteMember(
     return { error: "Δεν μπορείς να διαγράψεις τον δικό σου λογαριασμό." };
   }
 
-  if (await hasCoverageToday(id)) {
-    return {
-      error:
-        "Το μέλος έχει ενεργή συνδρομή και δεν μπορεί να διαγραφεί. Κάνε τη συνδρομή ανενεργή ή διάγραψέ τη πρώτα.",
-    };
-  }
   if (await countMemberships(id)) {
     return {
       error:
-        "Το μέλος έχει ιστορικό συνδρομών και δεν μπορεί να διαγραφεί. Διάγραψε πρώτα τις συνδρομές του.",
+        "Το μέλος έχει ιστορικό συνδρομών και δεν μπορεί να διαγραφεί. Κάνε το μέλος ανενεργό αντί να το διαγράψεις.",
     };
   }
 
