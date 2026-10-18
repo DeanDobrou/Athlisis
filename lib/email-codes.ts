@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 
-import type { Queryable } from "@/lib/bookings";
+import type { Queryable } from "@/lib/db";
 import { gymName, sendEmail } from "@/lib/email";
 
 export type CodePurpose = "password_reset" | "email_change";

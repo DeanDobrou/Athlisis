@@ -15,7 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listMembers, PAGE_SIZE, type MemberFilter } from "@/lib/members";
+import { PAGE_SIZE } from "@/lib/db";
+import { listMembers, type MemberFilter } from "@/lib/members";
 import { requireAdmin } from "@/lib/session";
 
 function pageHref(filter: MemberFilter, page: number): string {

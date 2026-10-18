@@ -1,7 +1,13 @@
 import "server-only";
 
-import type { Queryable } from "@/lib/bookings";
-import { db, greekFold, likeLiteral } from "@/lib/db";
+import {
+  db,
+  greekFold,
+  likeLiteral,
+  type Page,
+  paginate,
+  type Queryable,
+} from "@/lib/db";
 import {
   isMembershipState,
   type BillingInterval,
@@ -51,6 +57,11 @@ export function coversDate(param: string, alias = "m"): string {
   return `(${alias}.status = 'active'
     AND ${alias}.starts_on <= ${param}
     AND (${alias}.ends_on IS NULL OR ${alias}.ends_on >= ${param}))`;
+}
+
+/** Whether a membership is money the member still owes: active and not paid. */
+export function owes(alias = "m"): string {
+  return `(${alias}.status = 'active' AND ${alias}.paid_on IS NULL)`;
 }
 
 /**
@@ -322,8 +333,6 @@ export async function memberHistory(
   };
 }
 
-export const PAGE_SIZE = 20;
-
 export type MembershipFilter = {
   q?: string;
   state?: string;
@@ -331,16 +340,9 @@ export type MembershipFilter = {
   page?: string;
 };
 
-export type MembershipPage = {
-  rows: Membership[];
-  total: number;
-  page: number;
-  pageCount: number;
-};
-
 export async function listMemberships(
   filter: MembershipFilter = {},
-): Promise<MembershipPage> {
+): Promise<Page<Membership>> {
   const where: string[] = [];
   const values: unknown[] = [];
 
@@ -367,37 +369,11 @@ export async function listMemberships(
      JOIN users u ON u.id = m.user_id
      ${whereSql}`;
 
-  const fetchPage = async (p: number) => {
-    const { rows } = await db().query<Membership & { total: string }>(
-      `SELECT ${COLUMNS}, count(*) OVER () AS total
-       ${from}
-       ORDER BY m.starts_on DESC, m.id DESC
-       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-      [...values, PAGE_SIZE, (p - 1) * PAGE_SIZE],
-    );
-    return rows;
-  };
-
-  let page = Math.max(1, Math.floor(Number(filter.page)) || 1);
-  let rows = await fetchPage(page);
-
-  if (rows.length === 0 && page > 1) {
-    const { rows: counted } = await db().query<{ total: string }>(
-      `SELECT count(*) AS total ${from}`,
-      values,
-    );
-    const total = Number(counted[0].total);
-    if (total > 0) {
-      page = Math.ceil(total / PAGE_SIZE);
-      rows = await fetchPage(page);
-    }
-  }
-
-  const total = rows.length > 0 ? Number(rows[0].total) : 0;
-  return {
-    rows,
-    total,
-    page,
-    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-  };
+  return paginate<Membership>(
+    COLUMNS,
+    from,
+    "m.starts_on DESC, m.id DESC",
+    values,
+    filter.page,
+  );
 }

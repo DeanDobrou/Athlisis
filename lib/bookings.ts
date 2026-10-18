@@ -6,6 +6,7 @@ import {
   coversDate,
   describeOverlap,
   findOverlap,
+  owes,
   periodEndsOn,
 } from "@/lib/memberships";
 import { formatMoney } from "@/lib/money";
@@ -31,7 +32,6 @@ export const MEMBER_CANCEL_CUTOFF_MINUTES = 60;
 
 /** Members may check in from this many minutes before a class starts until it ends. */
 export const MEMBER_CHECK_IN_OPENS_MINUTES = 10;
-export type Queryable = Pick<PoolClient, "query">;
 
 export const TRAINED_ON_UNPAID_MEMBERSHIP =
   "Το μέλος προπονήθηκε με αυτή τη συνδρομή, οπότε χρωστάει. Κατάγραψε την πληρωμή αντί να τη διαγράψεις.";
@@ -189,12 +189,12 @@ export async function bookMember(
   );
 
   if (covering.length === 0) {
-    const { rowCount: owes } = await client.query(
-      `SELECT 1 FROM memberships
-       WHERE user_id = $1 AND status = 'active' AND paid_on IS NULL LIMIT 1`,
+    const { rowCount: owing } = await client.query(
+      `SELECT 1 FROM memberships m
+       WHERE m.user_id = $1 AND ${owes()} LIMIT 1`,
       [userId],
     );
-    if (owes) {
+    if (owing) {
       return {
         ok: false,
         error: say(
@@ -369,7 +369,7 @@ export async function cancelBooking(
 
   const { rows: left } = await client.query<{ amount_cents: number }>(
     `SELECT m.amount_cents FROM memberships m
-     WHERE m.id = $1 AND m.status = 'active' AND m.paid_on IS NULL
+     WHERE m.id = $1 AND ${owes()}
        AND NOT EXISTS (
          SELECT 1 FROM bookings b
          WHERE b.membership_id = m.id AND b.status <> 'cancelled'

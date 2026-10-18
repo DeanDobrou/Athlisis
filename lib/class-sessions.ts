@@ -1,8 +1,8 @@
 import "server-only";
 
-import { HOLDS_A_PLACE, type Queryable } from "@/lib/bookings";
+import { HOLDS_A_PLACE } from "@/lib/bookings";
 import type { ClassType } from "@/lib/class-types";
-import { db } from "@/lib/db";
+import { db, type Queryable } from "@/lib/db";
 import type { BookingStatus } from "@/lib/enums";
 import { TRAINING_DAYS, todayInGym } from "@/lib/gym-time";
 import { membershipState } from "@/lib/memberships";

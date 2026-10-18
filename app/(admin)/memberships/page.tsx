@@ -15,11 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PAGE_SIZE } from "@/lib/db";
 import { PAYMENT_METHODS } from "@/lib/enums";
 import { formatDate } from "@/lib/gym-time";
 import {
   listMemberships,
-  PAGE_SIZE,
   type MembershipFilter,
 } from "@/lib/memberships";
 import { formatMoney } from "@/lib/money";

@@ -4,8 +4,7 @@ import { randomBytes } from "node:crypto";
 
 import { SignJWT, jwtVerify } from "jose";
 
-import type { Queryable } from "@/lib/bookings";
-import { db } from "@/lib/db";
+import { db, type Queryable } from "@/lib/db";
 import { issueCode, spendCode } from "@/lib/email-codes";
 import {
   hashPassword,
@@ -101,10 +100,11 @@ export function mintSetPasswordToken(session: Session): Promise<string> {
     .sign(signingKey());
 }
 
-/** Reads a session out of a JWT, or null if it is missing or not valid. */
-export async function readToken(
+/** A JWT's user, token_version and role claim, or null if it is missing, not valid, or made for another purpose. */
+async function verify(
   token: string | undefined,
-): Promise<Session | null> {
+  purpose?: string,
+): Promise<{ userId: number; tokenVersion: number; role: unknown } | null> {
   if (!token) return null;
 
   const key = signingKey();
@@ -113,24 +113,44 @@ export async function readToken(
     const { payload } = await jwtVerify(token, key, {
       algorithms: ["HS256"],
     });
-    if (payload.purpose !== undefined) return null;
-
-    const role = payload.role;
-    if (role !== "admin" && role !== "member") return null;
+    if (payload.purpose !== purpose) return null;
 
     const userId = Number(payload.sub);
     if (!Number.isSafeInteger(userId) || userId <= 0) return null;
 
     // Tokens minted before the column existed carry no claim and count as 0.
     const tokenVersion = payload.tokenVersion ?? 0;
-    if (typeof tokenVersion !== "number" || !Number.isSafeInteger(tokenVersion)) {
-      return null;
-    }
+    if (!Number.isSafeInteger(tokenVersion)) return null;
 
-    return { userId, role, tokenVersion };
+    return { userId, tokenVersion: tokenVersion as number, role: payload.role };
   } catch {
     return null;
   }
+}
+
+/** Reads a session out of a JWT, or null if it is missing or not valid. */
+export async function readToken(
+  token: string | undefined,
+): Promise<Session | null> {
+  const claims = await verify(token);
+  if (!claims) return null;
+
+  const { userId, tokenVersion, role } = claims;
+  if (role !== "admin" && role !== "member") return null;
+  return { userId, role, tokenVersion };
+}
+
+/** The user's current role, or null once the account is inactive or the session's token_version is stale. */
+export async function liveRole(
+  session: Session,
+  runner: Queryable = db(),
+): Promise<Role | null> {
+  const { rows } = await runner.query<{ role: Role }>(
+    `SELECT role FROM users
+     WHERE id = $1 AND status = 'active' AND token_version = $2`,
+    [session.userId, session.tokenVersion],
+  );
+  return rows[0]?.role ?? null;
 }
 
 /** The token from an `Authorization: Bearer ...` header, if there is one. */
@@ -153,18 +173,36 @@ export async function requireUser(
   const session = await readToken(bearerToken(request));
   if (!session) return null;
 
-  const { rows } = await runner.query<{ role: Role }>(
-    `SELECT role FROM users
-     WHERE id = $1 AND status = 'active' AND token_version = $2`,
-    [session.userId, session.tokenVersion],
-  );
-  if (rows.length === 0) return null;
+  const role = await liveRole(session, runner);
+  return role ? { ...session, role } : null;
+}
 
-  return {
-    userId: session.userId,
+/**
+ * Saves a new password, raises token_version to sign every other device out,
+ * and returns a fresh token. `guard` adds SQL conditions (its value is $3);
+ * null when they no longer match.
+ */
+async function replacePassword(
+  runner: Queryable,
+  userId: number,
+  next: string,
+  guard = "",
+  guardValue?: unknown,
+): Promise<string | null> {
+  const { rows } = await runner.query<{ role: Role; token_version: number }>(
+    `UPDATE users SET password_hash = $1, must_change_password = false,
+       token_version = token_version + 1
+     WHERE id = $2 ${guard}
+     RETURNING role, token_version`,
+    [await hashPassword(next), userId, ...(guard ? [guardValue] : [])],
+  );
+  if (!rows[0]) return null;
+
+  return mintToken({
+    userId,
     role: rows[0].role,
-    tokenVersion: session.tokenVersion,
-  };
+    tokenVersion: rows[0].token_version,
+  });
 }
 
 /**
@@ -189,27 +227,19 @@ export async function changePassword(
     return { ok: false, error: "Ο τρέχων κωδικός είναι λάθος." };
   }
 
-  const { rows: saved } = await runner.query<{
-    role: Role;
-    token_version: number;
-  }>(
-    `UPDATE users SET password_hash = $1, must_change_password = false,
-       token_version = token_version + 1
-     WHERE id = $2 AND password_hash = $3
-     RETURNING role, token_version`,
-    [await hashPassword(next), userId, rows[0].password_hash],
+  const token = await replacePassword(
+    runner,
+    userId,
+    next,
+    "AND password_hash = $3",
+    rows[0].password_hash,
   );
-  if (!saved[0]) {
+  if (!token) {
     return {
       ok: false,
       error: "Ο κωδικός μόλις άλλαξε από άλλο αίτημα, οπότε αυτή η αλλαγή δεν έγινε.",
     };
   }
-  const token = await mintToken({
-    userId,
-    role: saved[0].role,
-    tokenVersion: saved[0].token_version,
-  });
   return { ok: true, token };
 }
 
@@ -230,42 +260,20 @@ export async function setFirstPassword(
     error: "Η σύνδεση έληξε. Συνδέσου ξανά με τον κωδικό που σου δόθηκε.",
     signInAgain: true,
   };
-  if (!setPasswordToken) return expired;
-
-  const key = signingKey();
-  let userId: number;
-  let tokenVersion: unknown;
-  try {
-    const { payload } = await jwtVerify(setPasswordToken, key, {
-      algorithms: ["HS256"],
-    });
-    if (payload.purpose !== "set-password") return expired;
-    userId = Number(payload.sub);
-    tokenVersion = payload.tokenVersion;
-  } catch {
-    return expired;
-  }
-  if (typeof tokenVersion !== "number") return expired;
+  const claims = await verify(setPasswordToken, "set-password");
+  if (!claims) return expired;
 
   const problem = passwordProblem(next);
   if (problem) return { ok: false, error: problem, signInAgain: false };
 
-  const { rows } = await runner.query<{ role: Role; token_version: number }>(
-    `UPDATE users SET password_hash = $1, must_change_password = false,
-       token_version = token_version + 1
-     WHERE id = $2 AND status = 'active' AND must_change_password
-       AND token_version = $3
-     RETURNING role, token_version`,
-    [await hashPassword(next), userId, tokenVersion],
+  const token = await replacePassword(
+    runner,
+    claims.userId,
+    next,
+    "AND status = 'active' AND must_change_password AND token_version = $3",
+    claims.tokenVersion,
   );
-  if (!rows[0]) return expired;
-
-  const token = await mintToken({
-    userId,
-    role: rows[0].role,
-    tokenVersion: rows[0].token_version,
-  });
-  return { ok: true, token };
+  return token ? { ok: true, token } : expired;
 }
 
 /**
@@ -312,17 +320,9 @@ export async function resetPassword(
     return { ok: false, error: "Ο κωδικός είναι λάθος ή έχει λήξει." };
   }
 
-  const { rows: saved } = await client.query<{ role: Role; token_version: number }>(
-    `UPDATE users SET password_hash = $1, must_change_password = false,
-       token_version = token_version + 1
-     WHERE id = $2
-     RETURNING role, token_version`,
-    [await hashPassword(next), userId],
-  );
-  const token = await mintToken({
-    userId,
-    role: saved[0].role,
-    tokenVersion: saved[0].token_version,
-  });
-  return { ok: true, token };
+  // The row is locked above, so the save always lands.
+  const token = await replacePassword(client, userId, next);
+  return token
+    ? { ok: true, token }
+    : { ok: false, error: "Ο κωδικός είναι λάθος ή έχει λήξει." };
 }

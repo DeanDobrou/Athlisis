@@ -1,4 +1,7 @@
-import { Pool, type PoolClient } from "pg";
+import { Pool, type PoolClient, type QueryResultRow } from "pg";
+
+/** The pool or a client inside a transaction: anything that can run a query. */
+export type Queryable = Pick<PoolClient, "query">;
 
 const globalForDb = globalThis as unknown as { pool?: Pool };
 
@@ -46,6 +49,61 @@ export function likeLiteral(value: string): string {
  */
 export function greekFold(expr: string): string {
   return `translate(unaccent(${expr}), 'ς', 'σ')`;
+}
+
+export const PAGE_SIZE = 20;
+
+export type Page<T> = {
+  rows: T[];
+  total: number;
+  page: number;
+  pageCount: number;
+};
+
+/**
+ * One page of `SELECT select from ORDER BY orderBy`, PAGE_SIZE rows long.
+ * A page past the end returns the last page instead.
+ */
+export async function paginate<T extends QueryResultRow>(
+  select: string,
+  from: string,
+  orderBy: string,
+  values: unknown[],
+  rawPage?: string,
+): Promise<Page<T>> {
+  const fetchPage = async (p: number) => {
+    const { rows } = await db().query<T & { total: string }>(
+      `SELECT ${select}, count(*) OVER () AS total
+       ${from}
+       ORDER BY ${orderBy}
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, PAGE_SIZE, (p - 1) * PAGE_SIZE],
+    );
+    return rows;
+  };
+
+  let page = Math.max(1, Math.floor(Number(rawPage)) || 1);
+  let rows = await fetchPage(page);
+
+  if (rows.length === 0 && page > 1) {
+    const { rows: counted } = await db().query<{ total: string }>(
+      `SELECT count(*) AS total ${from}`,
+      values,
+    );
+    const found = Number(counted[0].total);
+    if (found > 0) {
+      page = Math.ceil(found / PAGE_SIZE);
+      rows = await fetchPage(page);
+    }
+  }
+
+  const total = rows.length > 0 ? Number(rows[0].total) : 0;
+  return {
+    rows,
+    total,
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
 }
 
 /**

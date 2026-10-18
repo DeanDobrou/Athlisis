@@ -4,8 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
-import { mintToken, readToken, type Session } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { liveRole, mintToken, readToken, type Session } from "@/lib/auth";
 
 export const SESSION_COOKIE = "session";
 
@@ -39,14 +38,7 @@ export async function destroySession(): Promise<void> {
 export async function requireAdmin(): Promise<Session> {
   const session = await getSession();
   if (session?.role !== "admin") redirect("/login");
-
-  const { rows } = await db().query(
-    `SELECT 1 FROM users
-     WHERE id = $1 AND role = 'admin' AND status = 'active'
-       AND token_version = $2`,
-    [session.userId, session.tokenVersion],
-  );
-  if (rows.length === 0) redirect("/login");
+  if ((await liveRole(session)) !== "admin") redirect("/login");
 
   return session;
 }

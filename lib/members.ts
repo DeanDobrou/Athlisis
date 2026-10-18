@@ -1,11 +1,17 @@
 import "server-only";
 
 import type { Role } from "@/lib/auth";
-import type { Queryable } from "@/lib/bookings";
-import { db, greekFold, likeLiteral } from "@/lib/db";
+import {
+  db,
+  greekFold,
+  likeLiteral,
+  type Page,
+  paginate,
+  type Queryable,
+} from "@/lib/db";
 import { gymName, sendEmail } from "@/lib/email";
 import { issueCode, spendCode } from "@/lib/email-codes";
-import { todayInGym } from "@/lib/gym-time";
+import { isRealDate, todayInGym } from "@/lib/gym-time";
 import { generatePassword, hashPassword, verifyPassword } from "@/lib/password";
 import { parseId } from "@/lib/utils";
 
@@ -27,8 +33,6 @@ const COLUMNS = `id, email, first_name, last_name, phone, role, status,
   to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
   to_char(created_at, 'YYYY-MM-DD') AS created_at`;
 
-export const PAGE_SIZE = 20;
-
 export type MemberFilter = {
   q?: string;
   status?: string;
@@ -36,14 +40,7 @@ export type MemberFilter = {
   page?: string;
 };
 
-export type MemberPage = {
-  rows: Member[];
-  total: number;
-  page: number;
-  pageCount: number;
-};
-
-export async function listMembers(filter: MemberFilter): Promise<MemberPage> {
+export async function listMembers(filter: MemberFilter): Promise<Page<Member>> {
   const where: string[] = [];
   const values: unknown[] = [];
 
@@ -69,39 +66,13 @@ export async function listMembers(filter: MemberFilter): Promise<MemberPage> {
   const from = `FROM users
      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`;
 
-  const fetchPage = async (p: number) => {
-    const { rows } = await db().query<Member & { total: string }>(
-      `SELECT ${COLUMNS}, count(*) OVER () AS total
-       ${from}
-       ORDER BY last_name, first_name
-       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
-      [...values, PAGE_SIZE, (p - 1) * PAGE_SIZE],
-    );
-    return rows;
-  };
-
-  let page = Math.max(1, Math.floor(Number(filter.page)) || 1);
-  let rows = await fetchPage(page);
-
-  if (rows.length === 0 && page > 1) {
-    const { rows: counted } = await db().query<{ total: string }>(
-      `SELECT count(*) AS total ${from}`,
-      values,
-    );
-    const found = Number(counted[0].total);
-    if (found > 0) {
-      page = Math.ceil(found / PAGE_SIZE);
-      rows = await fetchPage(page);
-    }
-  }
-
-  const total = rows.length > 0 ? Number(rows[0].total) : 0;
-  return {
-    rows,
-    total,
-    page,
-    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
-  };
+  return paginate<Member>(
+    COLUMNS,
+    from,
+    "last_name, first_name",
+    values,
+    filter.page,
+  );
 }
 
 export async function getMember(rawId: string): Promise<Member | null> {
@@ -149,13 +120,7 @@ export function memberFieldsProblem(
 
 /** Whether a YYYY-MM-DD string is a real calendar date before today. */
 function isPastDate(day: string): boolean {
-  const date = new Date(`${day}T00:00:00Z`);
-  return (
-    /^\d{4}-\d{2}-\d{2}$/.test(day) &&
-    !Number.isNaN(date.getTime()) &&
-    date.toISOString().slice(0, 10) === day &&
-    day < todayInGym()
-  );
+  return isRealDate(day) && day < todayInGym();
 }
 
 /** Saves the details members edit themselves. Email changes through a confirmed code instead. */
