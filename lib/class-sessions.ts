@@ -148,6 +148,47 @@ export async function overlappingSession(
   return rows[0]?.times ?? null;
 }
 
+/** A class as insertSession() takes it, and as SESSION_TO_COPY reads one back. */
+export type NewSession = {
+  day: string;
+  start_time: string;
+  end_time: string;
+  capacity: number;
+  notes: string | null;
+  type_ids: readonly (number | string)[];
+};
+
+/** The columns that read class_sessions `s` back as a NewSession, for copying. */
+export const SESSION_TO_COPY = `to_char(s.starts_at, 'YYYY-MM-DD') AS day,
+  to_char(s.starts_at, 'HH24:MI') AS start_time,
+  to_char(s.ends_at, 'HH24:MI') AS end_time,
+  s.capacity, s.notes,
+  ARRAY(SELECT t.class_type_id FROM class_session_types t
+        WHERE t.class_session_id = s.id) AS type_ids`;
+
+/**
+ * Adds a scheduled class with its class types and returns its id. `day` and
+ * the HH:MM times are gym-local, so a class keeps its wall-clock time across a
+ * clock change.
+ */
+export async function insertSession(
+  runner: Queryable,
+  s: NewSession,
+): Promise<string> {
+  const { rows } = await runner.query<{ id: string }>(
+    `INSERT INTO class_sessions (starts_at, ends_at, capacity, status, notes)
+     VALUES ($1::date + $2::time, $1::date + $3::time, $4, 'scheduled', $5)
+     RETURNING id`,
+    [s.day, s.start_time, s.end_time, s.capacity, s.notes],
+  );
+  await runner.query(
+    `INSERT INTO class_session_types (class_session_id, class_type_id)
+     SELECT $1, unnest($2::bigint[])`,
+    [rows[0].id, s.type_ids],
+  );
+  return rows[0].id;
+}
+
 export async function getSession(
   rawId: string,
 ): Promise<ClassSession | null> {

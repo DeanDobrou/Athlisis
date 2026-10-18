@@ -12,7 +12,12 @@ import {
   isWeekend,
   TRAINING_DAYS,
 } from "@/lib/gym-time";
-import { overlappingSession } from "@/lib/class-sessions";
+import {
+  insertSession,
+  type NewSession,
+  overlappingSession,
+  SESSION_TO_COPY,
+} from "@/lib/class-sessions";
 import { nextFreeSlot, slotOf, SLOTS } from "@/lib/slots";
 import { requireAdmin } from "@/lib/session";
 import { type ActionResult, parseId } from "@/lib/utils";
@@ -102,18 +107,14 @@ export async function createSession(
     const taken = await overlappingSession(client, f.day, f.startTime, f.endTime);
     if (taken) return overlapError(taken);
 
-    const { rows } = await client.query<{ id: string }>(
-      `INSERT INTO class_sessions
-         (starts_at, ends_at, capacity, status, notes)
-       VALUES (${STARTS_AT}, ${ENDS_AT}, $4, 'scheduled', $5)
-       RETURNING id`,
-      [f.day, f.startTime, f.endTime, f.capacity, f.notes],
-    );
-    await client.query(
-      `INSERT INTO class_session_types (class_session_id, class_type_id)
-       SELECT $1, unnest($2::bigint[])`,
-      [rows[0].id, f.typeIds],
-    );
+    await insertSession(client, {
+      day: f.day,
+      start_time: f.startTime,
+      end_time: f.endTime,
+      capacity: f.capacity,
+      notes: f.notes,
+      type_ids: f.typeIds,
+    });
     return undefined;
   });
   if (failed) return failed;
@@ -240,18 +241,8 @@ export async function copySession(
   if (id === null) return { error: "Άγνωστο μάθημα." };
 
   const result = await withTransaction(async (client) => {
-    const { rows: found } = await client.query<{
-      day: string;
-      start_time: string;
-      end_time: string;
-      capacity: number;
-      notes: string | null;
-    }>(
-      `SELECT to_char(starts_at, 'YYYY-MM-DD') AS day,
-              to_char(starts_at, 'HH24:MI') AS start_time,
-              to_char(ends_at, 'HH24:MI') AS end_time,
-              capacity, notes
-       FROM class_sessions WHERE id = $1`,
+    const { rows: found } = await client.query<NewSession>(
+      `SELECT ${SESSION_TO_COPY} FROM class_sessions s WHERE s.id = $1`,
       [id],
     );
     if (found.length === 0) return { error: "Άγνωστο μάθημα." };
@@ -274,22 +265,12 @@ export async function copySession(
       return { error: "Όλες οι ώρες είναι ήδη καλυμμένες για εκείνη την ημέρα." };
     }
 
-    const { rows: created } = await client.query<{ id: string }>(
-      `INSERT INTO class_sessions
-         (starts_at, ends_at, capacity, status, notes)
-       VALUES ($1::date + $2::time, $1::date + $3::time, $4, 'scheduled', $5)
-       RETURNING id`,
-      [source.day, target.start, target.end, source.capacity, source.notes],
-    );
-
     // The class types are the point of the copy, so they come across too.
-    await client.query(
-      `INSERT INTO class_session_types (class_session_id, class_type_id)
-       SELECT $1, class_type_id
-       FROM class_session_types WHERE class_session_id = $2`,
-      [created[0].id, id],
-    );
-
+    await insertSession(client, {
+      ...source,
+      start_time: target.start,
+      end_time: target.end,
+    });
     return undefined;
   });
 
@@ -315,19 +296,8 @@ export async function copyLastWeek(
   if (!isRealDate(week)) return { error: "Άγνωστη εβδομάδα." };
 
   const result = await withTransaction(async (client): Promise<ActionResult> => {
-    const { rows: source } = await client.query<{
-      id: string;
-      day: string;
-      start_time: string;
-      end_time: string;
-      capacity: number;
-      notes: string | null;
-    }>(
-      `SELECT s.id,
-              to_char(s.starts_at, 'YYYY-MM-DD') AS day,
-              to_char(s.starts_at, 'HH24:MI') AS start_time,
-              to_char(s.ends_at, 'HH24:MI') AS end_time,
-              s.capacity, s.notes
+    const { rows: source } = await client.query<NewSession>(
+      `SELECT ${SESSION_TO_COPY}
        FROM class_sessions s
        WHERE s.starts_at >= $1::date AND s.starts_at < $1::date + $2::int
        ORDER BY s.starts_at`,
@@ -342,19 +312,7 @@ export async function copyLastWeek(
       const day = addDays(s.day, 7);
       if (await overlappingSession(client, day, s.start_time, s.end_time)) continue;
 
-      const { rows: created } = await client.query<{ id: string }>(
-        `INSERT INTO class_sessions
-           (starts_at, ends_at, capacity, status, notes)
-         VALUES ($1::date + $2::time, $1::date + $3::time, $4, 'scheduled', $5)
-         RETURNING id`,
-        [day, s.start_time, s.end_time, s.capacity, s.notes],
-      );
-      await client.query(
-        `INSERT INTO class_session_types (class_session_id, class_type_id)
-         SELECT $1, class_type_id
-         FROM class_session_types WHERE class_session_id = $2`,
-        [created[0].id, s.id],
-      );
+      await insertSession(client, { ...s, day });
       added += 1;
     }
 
