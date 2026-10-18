@@ -2,7 +2,7 @@ import { createSession } from "@/app/actions/class-sessions";
 import { SessionForm } from "@/components/session-form";
 import { DEFAULT_CAPACITY } from "@/lib/class-sessions";
 import { listClassTypes } from "@/lib/class-types";
-import { todayInGym } from "@/lib/gym-time";
+import { isRealDate, todayInGym } from "@/lib/gym-time";
 import { requireAdmin } from "@/lib/session";
 import { DEFAULT_SLOT, SLOTS } from "@/lib/slots";
 
@@ -15,8 +15,7 @@ export default async function NewSessionPage({
 
   const { day, start } = await searchParams;
   const classTypes = await listClassTypes();
-  const defaultDay =
-    day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : todayInGym();
+  const defaultDay = day && isRealDate(day) ? day : todayInGym();
   // The schedule's add link names the day's first free slot.
   const defaultSlot = SLOTS.find((s) => s.start === start) ?? DEFAULT_SLOT;
 

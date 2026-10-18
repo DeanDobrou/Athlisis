@@ -18,6 +18,7 @@ import { listSessionsForWeek, type ClassSession } from "@/lib/class-sessions";
 import {
   addDays,
   formatDate,
+  isRealDate,
   scheduleWeekStart,
   todayInGym,
   TRAINING_DAYS,
@@ -38,9 +39,7 @@ export default async function SchedulePage({
   const { week } = await searchParams;
   const today = todayInGym();
   const monday =
-    week && /^\d{4}-\d{2}-\d{2}$/.test(week)
-      ? weekStart(week)
-      : scheduleWeekStart(today);
+    week && isRealDate(week) ? weekStart(week) : scheduleWeekStart(today);
 
   const sessions = await listSessionsForWeek(monday);
   const days = Array.from({ length: TRAINING_DAYS }, (_, i) =>
