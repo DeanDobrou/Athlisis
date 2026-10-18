@@ -48,7 +48,7 @@ export function rateLimit(key: string, now = Date.now()): RateLimitResult {
 }
 
 export function clearRateLimit(key: string): void {
-  hits.delete(key);
+  hits.delete(key.slice(0, MAX_KEY_CHARS));
 }
 
 /**
@@ -106,6 +106,8 @@ if ((import.meta as { main?: boolean }).main) {
     !rateLimit(longB, t0).allowed,
     "keys differing only past the length cap must share a bucket",
   );
+  clearRateLimit(longA);
+  check(rateLimit(longA, t0).allowed, "clearRateLimit must reset a long key");
 
   const sweepsBefore = sweeps;
   for (let i = 0; i < MAX_KEYS + 100; i++) rateLimit(`evict-${i}`, t0);
