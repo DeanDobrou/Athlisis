@@ -148,8 +148,8 @@ if ((import.meta as { main?: boolean }).main) {
   check(addDays("2026-10-25", 1) === "2026-10-26", "day of the DST change");
   check(weekStart("2026-10-25") === "2026-10-19", "DST Sunday still maps back");
 
-  check(weekdayName("2026-08-31") === "Monday", "weekday name");
-  check(weekdayName("2026-09-06") === "Sunday", "weekday name wraps");
+  check(weekdayName("2026-08-31") === "Δευτέρα", "weekday name");
+  check(weekdayName("2026-09-06") === "Κυριακή", "weekday name wraps");
 
   check(!isWeekend("2026-08-31"), "Monday is a training day");
   check(!isWeekend("2026-09-04"), "Friday is a training day");
