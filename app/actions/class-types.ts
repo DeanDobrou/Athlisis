@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { db, hasPgCode } from "@/lib/db";
 import { redirectSaved } from "@/lib/flash";
 import { requireAdmin } from "@/lib/session";
-import { parseId } from "@/lib/utils";
+import { type ActionResult, parseId } from "@/lib/utils";
 
 export type ClassTypeFormState =
   | { error: string; field?: string }
@@ -77,7 +77,7 @@ export async function updateClassType(
 
 export async function deleteClassType(
   rawId: string,
-): Promise<{ error: string } | undefined> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   const id = parseId(rawId);

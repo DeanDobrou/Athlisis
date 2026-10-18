@@ -1,12 +1,13 @@
+import { Mail } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { deleteMember } from "@/app/actions/members";
+import { deleteMember, resendWelcomeEmail } from "@/app/actions/members";
+import { ActionButton } from "@/components/action-button";
 import { DeleteButton } from "@/components/delete-button";
 import { MembershipStateBadge } from "@/components/membership-state-badge";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { WelcomeEmailButton } from "@/components/welcome-email-button";
 import {
   Table,
   TableBody,
@@ -69,7 +70,20 @@ export default async function MemberPage({
 
         <div className="flex flex-wrap items-start gap-2">
           {member.role === "member" && member.status === "active" && (
-            <WelcomeEmailButton memberId={member.id} name={fullName} />
+            <ActionButton
+              action={resendWelcomeEmail.bind(null, member.id)}
+              confirm={{
+                title: `Αποστολή email καλωσορίσματος στο μέλος ${fullName};`,
+                description:
+                  "Το μέλος λαμβάνει νέο προσωρινό κωδικό και οδηγίες για την εφαρμογή. Ο τωρινός κωδικός του παύει να ισχύει και αποσυνδέεται από την εφαρμογή, αν είναι συνδεδεμένο.",
+                label: "Αποστολή",
+              }}
+              variant="outline"
+              icon={<Mail />}
+              pendingLabel="Γίνεται αποστολή..."
+            >
+              Email καλωσορίσματος
+            </ActionButton>
           )}
           <Link
             href={`/members/${member.id}/update`}

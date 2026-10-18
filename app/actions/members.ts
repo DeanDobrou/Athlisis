@@ -20,7 +20,7 @@ import {
   passwordProblem,
 } from "@/lib/password";
 import { createSession, requireAdmin } from "@/lib/session";
-import { parseId } from "@/lib/utils";
+import { type ActionResult, parseId } from "@/lib/utils";
 
 export type MemberFormState = { error: string; field?: string } | undefined;
 
@@ -108,7 +108,7 @@ export async function createMember(
  */
 export async function resendWelcomeEmail(
   rawId: string,
-): Promise<{ error?: string; message?: string }> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   const id = parseId(rawId);
@@ -131,7 +131,7 @@ export async function resendWelcomeEmail(
       error: "Το email δεν στάλθηκε, οπότε ο κωδικός του μέλους δεν άλλαξε.",
     };
   }
-  return { message: "Στάλθηκε email καλωσορίσματος με νέο προσωρινό κωδικό." };
+  return { notice: "Στάλθηκε email καλωσορίσματος με νέο προσωρινό κωδικό." };
 }
 
 /**
@@ -258,7 +258,7 @@ export async function updateProfile(
 
 export async function deleteMember(
   rawId: string,
-): Promise<{ error: string } | undefined> {
+): Promise<ActionResult> {
   const admin = await requireAdmin();
 
   const id = parseId(rawId);

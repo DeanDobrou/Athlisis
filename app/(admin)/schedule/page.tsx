@@ -1,9 +1,22 @@
-import { ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
+import {
+  Ban,
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Pencil,
+  Plus,
+  RotateCcw,
+} from "lucide-react";
 import Link from "next/link";
 
-import { CopySessionButton } from "@/components/copy-session-button";
-import { CopyWeekButton } from "@/components/copy-week-button";
-import { SessionStatusButton } from "@/components/session-status-button";
+import {
+  cancelSessionAction,
+  copyLastWeek,
+  copySession,
+  restoreSessionAction,
+} from "@/app/actions/class-sessions";
+import { ActionButton } from "@/components/action-button";
 import { WeekPicker } from "@/components/week-picker";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -79,7 +92,14 @@ export default async function SchedulePage({
           >
             Τρέχουσα εβδομάδα
           </Link>
-          <CopyWeekButton week={monday} />
+          <ActionButton
+            action={copyLastWeek.bind(null, monday)}
+            variant="outline"
+            icon={<CalendarPlus />}
+            pendingLabel="Γίνεται αντιγραφή..."
+          >
+            Αντιγραφή προηγούμενης εβδομάδας
+          </ActionButton>
         </div>
       </div>
 
@@ -134,9 +154,13 @@ export default async function SchedulePage({
                             </p>
                           </div>
                           <div className="flex shrink-0 items-start gap-1">
-                            <CopySessionButton
-                              sessionId={s.id}
-                              label={`το μάθημα ${s.start_time} στις ${formatDate(day)}`}
+                            <ActionButton
+                              action={copySession.bind(null, s.id)}
+                              variant="ghost"
+                              size="icon-sm"
+                              icon={<Copy />}
+                              aria-label={`Αντιγραφή το μάθημα ${s.start_time} στις ${formatDate(day)} στην επόμενη ελεύθερη ώρα`}
+                              title="Αντιγραφή στην επόμενη ελεύθερη ώρα"
                             />
                             <Link
                               href={`/schedule/${s.id}/update`}
@@ -149,11 +173,32 @@ export default async function SchedulePage({
                             >
                               <Pencil />
                             </Link>
-                            <SessionStatusButton
-                              sessionId={s.id}
-                              cancelled={s.status === "cancelled"}
-                              label={`το μάθημα ${s.start_time} στις ${formatDate(day)}`}
-                            />
+                            {/* Only cancelling asks first: bringing the class back does not bring its bookings back. */}
+                            {s.status === "cancelled" ? (
+                              <ActionButton
+                                action={restoreSessionAction.bind(null, s.id)}
+                                variant="ghost"
+                                size="icon-sm"
+                                icon={<RotateCcw />}
+                                aria-label={`Επαναφορά, το μάθημα ${s.start_time} στις ${formatDate(day)}`}
+                                title="Επαναφορά μαθήματος"
+                              />
+                            ) : (
+                              <ActionButton
+                                action={cancelSessionAction.bind(null, s.id)}
+                                confirm={{
+                                  title: `Να ακυρωθεί το μάθημα ${s.start_time} στις ${formatDate(day)};`,
+                                  description:
+                                    "Ακυρώνονται και οι κρατήσεις του και οι επισκέψεις επιστρέφουν στα μέλη. Όσοι έχουν κάνει ήδη check-in μένουν. Αν το επαναφέρεις, οι κρατήσεις δεν επιστρέφουν.",
+                                  label: "Ακύρωση μαθήματος",
+                                }}
+                                variant="ghost"
+                                size="icon-sm"
+                                icon={<Ban className="text-destructive" />}
+                                aria-label={`Ακύρωση, το μάθημα ${s.start_time} στις ${formatDate(day)}`}
+                                title="Ακύρωση μαθήματος"
+                              />
+                            )}
                           </div>
                         </div>
 

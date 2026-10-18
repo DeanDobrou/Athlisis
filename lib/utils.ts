@@ -37,6 +37,9 @@ export function fold(s: string): string {
 export const CALL_FAILED =
   "Η σελίδα είναι παλιά ή χάθηκε η σύνδεση. Κάνε ανανέωση και δοκίμασε ξανά."
 
+/** What a button's Server Action returns: why it refused, a notice to show, or nothing. */
+export type ActionResult = { error: string } | { notice: string } | undefined
+
 /**
  * Runs a Server Action from the client and turns a call that throws into the
  * ordinary refusal every caller here already handles. Without it a stale tab

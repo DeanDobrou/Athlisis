@@ -15,7 +15,7 @@ import {
 import { overlappingSession } from "@/lib/class-sessions";
 import { nextFreeSlot, slotOf, SLOTS } from "@/lib/slots";
 import { requireAdmin } from "@/lib/session";
-import { parseId } from "@/lib/utils";
+import { type ActionResult, parseId } from "@/lib/utils";
 
 export type SessionFormState = { error: string; field?: string } | undefined;
 
@@ -174,7 +174,7 @@ const count = (n: number, one: string, many: string) =>
  */
 export async function cancelSessionAction(
   rawId: string,
-): Promise<{ error: string } | { notice: string }> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   const id = parseId(rawId);
@@ -207,7 +207,7 @@ export async function cancelSessionAction(
  */
 export async function restoreSessionAction(
   rawId: string,
-): Promise<{ error: string } | undefined> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   const id = parseId(rawId);
@@ -233,7 +233,7 @@ export async function restoreSessionAction(
  */
 export async function copySession(
   rawId: string,
-): Promise<{ error: string } | undefined> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   const id = parseId(rawId);
@@ -309,12 +309,12 @@ export async function copySession(
  */
 export async function copyLastWeek(
   week: string,
-): Promise<{ error?: string; message?: string }> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   if (!isRealDate(week)) return { error: "Άγνωστη εβδομάδα." };
 
-  const result = await withTransaction(async (client) => {
+  const result = await withTransaction(async (client): Promise<ActionResult> => {
     const { rows: source } = await client.query<{
       id: string;
       day: string;
@@ -360,24 +360,24 @@ export async function copyLastWeek(
 
     const skipped = source.length - added;
     if (added === 0) {
-      return { message: "Αυτή η εβδομάδα είναι ήδη ίδια με την προηγούμενη." };
+      return { notice: "Αυτή η εβδομάδα είναι ήδη ίδια με την προηγούμενη." };
     }
     return {
-      message:
+      notice:
         skipped === 0
           ? `Αντιγράφηκαν μαθήματα: ${added}.`
           : `Αντιγράφηκαν μαθήματα: ${added}. Ώρες που είχαν ήδη μάθημα και έμειναν ως είχαν: ${skipped}.`,
     };
   });
 
-  if (!result.error) revalidatePath("/schedule");
+  if (!(result && "error" in result)) revalidatePath("/schedule");
   return result;
 }
 
 export async function deleteSession(
   rawId: string,
   week: string,
-): Promise<{ error: string } | undefined> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   const id = parseId(rawId);

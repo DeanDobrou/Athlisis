@@ -906,7 +906,7 @@ Cloudflare.
 | `components/session-check-in.tsx` | the roll call: tick, all-present, Save and Πίσω | done |
 | `app/actions/bookings.ts` | book, cancel, move, and save a class's check-ins | done |
 | `components/week-picker.tsx` | week jumper shared by both week pages (`basePath`) | done |
-| `components/session-status-button.tsx` | cancel a class after asking, or restore a cancelled one | done |
+| `components/action-button.tsx` | every one-click action (copy, cancel or restore a class, welcome email, delete): runs it, asks first when told to, toasts the error or notice | done |
 | `scripts/migrate.mjs` | migration runner (`--dry-run`) | done |
 | `app/api/health/route.ts` | connectivity smoke test | done |
 | `app/page.tsx` | redirects to `/dashboard` | done |

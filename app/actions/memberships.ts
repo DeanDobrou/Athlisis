@@ -19,7 +19,7 @@ import {
 } from "@/lib/memberships";
 import { parsePriceToCents } from "@/lib/money";
 import { requireAdmin } from "@/lib/session";
-import { parseId } from "@/lib/utils";
+import { type ActionResult, parseId } from "@/lib/utils";
 
 export type MembershipFormState =
   | { error: string; field?: string }
@@ -264,7 +264,7 @@ export async function updateMembership(
 
 export async function deleteMembership(
   rawId: string,
-): Promise<{ error: string } | undefined> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   const id = parseId(rawId);

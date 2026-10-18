@@ -8,7 +8,7 @@ import { redirectSaved } from "@/lib/flash";
 import { isBillingInterval } from "@/lib/enums";
 import { parsePriceToCents } from "@/lib/money";
 import { requireAdmin } from "@/lib/session";
-import { parseId } from "@/lib/utils";
+import { type ActionResult, parseId } from "@/lib/utils";
 
 export type PlanFormState = { error: string; field?: string } | undefined;
 
@@ -109,7 +109,7 @@ export async function updatePlan(
 
 export async function deletePlan(
   rawId: string,
-): Promise<{ error: string } | undefined> {
+): Promise<ActionResult> {
   await requireAdmin();
 
   const id = parseId(rawId);
