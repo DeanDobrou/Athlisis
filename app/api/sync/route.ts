@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { signedOut } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { memberSchedule } from "@/lib/class-sessions";
 import { getMember } from "@/lib/members";
@@ -11,9 +12,7 @@ import { memberMemberships } from "@/lib/memberships";
  */
 export async function GET(request: Request) {
   const session = await requireUser(request);
-  if (!session) {
-    return Response.json({ error: "Απαιτείται σύνδεση." }, { status: 401 });
-  }
+  if (!session) return signedOut();
 
   const [classes, memberships, profile] = await Promise.all([
     memberSchedule(session.userId),

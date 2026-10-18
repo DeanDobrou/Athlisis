@@ -1,3 +1,4 @@
+import { fail, signedOut } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { memberHistory } from "@/lib/memberships";
 
@@ -7,15 +8,11 @@ import { memberHistory } from "@/lib/memberships";
  */
 export async function GET(request: Request) {
   const session = await requireUser(request);
-  if (!session) {
-    return Response.json({ error: "Απαιτείται σύνδεση." }, { status: 401 });
-  }
+  if (!session) return signedOut();
 
   const before = new URL(request.url).searchParams.get("before");
   const page = await memberHistory(session.userId, before);
-  if (!page) {
-    return Response.json({ error: "Μη έγκυρο αίτημα." }, { status: 400 });
-  }
+  if (!page) return fail("Μη έγκυρο αίτημα.");
 
   return Response.json(page, { headers: { "Cache-Control": "private, no-cache" } });
 }

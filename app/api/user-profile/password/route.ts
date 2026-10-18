@@ -1,9 +1,6 @@
+import { fail, jsonBody, signedOut, throttled } from "@/lib/api";
 import { changePassword, requireUser } from "@/lib/auth";
-import {
-  clearRateLimit,
-  rateLimit,
-  retryMessage,
-} from "@/lib/rate-limit";
+import { clearRateLimit, rateLimit } from "@/lib/rate-limit";
 
 /**
  * Changes the signed-in user's password and returns the replacement token.
@@ -12,47 +9,25 @@ import {
  */
 export async function POST(request: Request) {
   const session = await requireUser(request);
-  if (!session) {
-    return Response.json({ error: "Απαιτείται σύνδεση." }, { status: 401 });
-  }
+  if (!session) return signedOut();
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Μη έγκυρο αίτημα." }, { status: 400 });
-  }
-  const { currentPassword, newPassword } = (body ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const body = await jsonBody(request);
+  if (!body) return fail("Μη έγκυρο αίτημα.");
+  const { currentPassword, newPassword } = body;
   if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
-    return Response.json(
-      { error: "Συμπλήρωσε τον τρέχοντα και τον νέο κωδικό." },
-      { status: 400 },
-    );
+    return fail("Συμπλήρωσε τον τρέχοντα και τον νέο κωδικό.");
   }
 
   const bucket = `password:${session.userId}`;
   const limit = rateLimit(bucket);
-  if (!limit.allowed) {
-    return Response.json(
-      { error: retryMessage(limit.retryAfterSeconds) },
-      {
-        status: 429,
-        headers: { "Retry-After": String(limit.retryAfterSeconds) },
-      },
-    );
-  }
+  if (!limit.allowed) return throttled(limit);
 
   const result = await changePassword(
     session.userId,
     currentPassword,
     newPassword,
   );
-  if (!result.ok) {
-    return Response.json({ error: result.error }, { status: 400 });
-  }
+  if (!result.ok) return fail(result.error);
 
   clearRateLimit(bucket);
   return Response.json({ token: result.token });

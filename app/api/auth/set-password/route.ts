@@ -1,3 +1,4 @@
+import { fail, jsonBody } from "@/lib/api";
 import { bearerToken, setFirstPassword } from "@/lib/auth";
 
 /**
@@ -6,27 +7,13 @@ import { bearerToken, setFirstPassword } from "@/lib/auth";
  * so the app goes back to the login screen.
  */
 export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Μη έγκυρο αίτημα." }, { status: 400 });
-  }
-  const { newPassword } = (body ?? {}) as Record<string, unknown>;
-  if (typeof newPassword !== "string") {
-    return Response.json(
-      { error: "Συμπλήρωσε τον νέο κωδικό." },
-      { status: 400 },
-    );
-  }
+  const body = await jsonBody(request);
+  if (!body) return fail("Μη έγκυρο αίτημα.");
+  const { newPassword } = body;
+  if (typeof newPassword !== "string") return fail("Συμπλήρωσε τον νέο κωδικό.");
 
   const result = await setFirstPassword(bearerToken(request), newPassword);
-  if (!result.ok) {
-    return Response.json(
-      { error: result.error },
-      { status: result.signInAgain ? 401 : 400 },
-    );
-  }
+  if (!result.ok) return fail(result.error, result.signInAgain ? 401 : 400);
 
   return Response.json({ token: result.token });
 }

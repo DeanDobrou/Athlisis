@@ -913,6 +913,7 @@ Cloudflare.
 | `lib/password.ts` | scrypt hash/verify; run directly to mint a hash | done |
 | `lib/session.ts` | JWT cookie sign/verify, `requireAdmin()` - the real gate | done |
 | `lib/rate-limit.ts` | in-memory login throttle | done |
+| `lib/api.ts` | the API routes' shared replies: `fail`, `signedOut`, `throttled`, `jsonBody` | done |
 | `proxy.ts` | optimistic route guard (Next 16 renamed `middleware`) | done |
 | `app/actions/auth.ts` | `login` / `logout` Server Actions | done |
 | `lib/members.ts` | member queries | done |

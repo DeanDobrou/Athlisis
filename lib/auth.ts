@@ -11,6 +11,7 @@ import {
   passwordProblem,
   verifyPassword,
 } from "@/lib/password";
+import { clearRateLimit, rateLimit, retryMessage } from "@/lib/rate-limit";
 
 export type Role = "member" | "admin";
 export type Session = { userId: number; role: Role; tokenVersion: number };
@@ -68,6 +69,43 @@ export async function authenticate(
     tokenVersion: user.token_version,
     mustChangePassword: user.must_change_password,
   };
+}
+
+/**
+ * The login form and the app's login: authenticate() behind the login rate
+ * limit, keyed on the address and the email. Fails with the HTTP status the
+ * API answers with.
+ */
+export async function logIn(
+  email: unknown,
+  password: unknown,
+  ip: string,
+  role?: Role,
+): Promise<
+  | { ok: true; session: Session & { mustChangePassword: boolean } }
+  | { ok: false; error: string; status: number; retryAfterSeconds?: number }
+> {
+  const normalized = typeof email === "string" ? email.trim().toLowerCase() : "";
+  if (!normalized || typeof password !== "string" || !password) {
+    return { ok: false, error: "Συμπλήρωσε email και κωδικό.", status: 400 };
+  }
+
+  const bucket = `login:${ip}:${normalized}`;
+  const limit = rateLimit(bucket);
+  if (!limit.allowed) {
+    return {
+      ok: false,
+      error: retryMessage(limit.retryAfterSeconds),
+      status: 429,
+      retryAfterSeconds: limit.retryAfterSeconds,
+    };
+  }
+
+  const session = await authenticate(normalized, password, role);
+  if (!session) return { ok: false, error: "Λάθος email ή κωδικός.", status: 401 };
+
+  clearRateLimit(bucket);
+  return { ok: true, session };
 }
 
 /** Whether a change to a user's row should end the sessions they have open. */

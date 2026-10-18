@@ -1,3 +1,4 @@
+import { fail, jsonBody, signedOut } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { bookMember } from "@/lib/bookings";
 import { withTransaction } from "@/lib/db";
@@ -10,24 +11,17 @@ import { parseId } from "@/lib/utils";
  */
 export async function POST(request: Request) {
   const session = await requireUser(request);
-  if (!session) {
-    return Response.json({ error: "Απαιτείται σύνδεση." }, { status: 401 });
-  }
+  if (!session) return signedOut();
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Μη έγκυρο αίτημα." }, { status: 400 });
-  }
-  const { classId, confirm } = (body ?? {}) as Record<string, unknown>;
-  const id = parseId(String(classId ?? ""));
-  if (id === null) {
-    return Response.json({ error: "Άγνωστο μάθημα." }, { status: 400 });
-  }
+  const body = await jsonBody(request);
+  if (!body) return fail("Μη έγκυρο αίτημα.");
+  const id = parseId(String(body.classId ?? ""));
+  if (id === null) return fail("Άγνωστο μάθημα.");
 
   const result = await withTransaction((client) =>
-    bookMember(client, session.userId, id, { confirmUnpaid: confirm === true }),
+    bookMember(client, session.userId, id, {
+      confirmUnpaid: body.confirm === true,
+    }),
   );
   if (!result.ok) {
     return Response.json(

@@ -1,3 +1,4 @@
+import { fail, signedOut } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { checkInByMember } from "@/lib/bookings";
 import { withTransaction } from "@/lib/db";
@@ -9,20 +10,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await requireUser(request);
-  if (!session) {
-    return Response.json({ error: "Απαιτείται σύνδεση." }, { status: 401 });
-  }
+  if (!session) return signedOut();
 
   const id = parseId((await params).id);
-  if (id === null) {
-    return Response.json({ error: "Άγνωστη κράτηση." }, { status: 400 });
-  }
+  if (id === null) return fail("Άγνωστη κράτηση.");
 
   const result = await withTransaction((client) =>
     checkInByMember(client, id, session.userId),
   );
-  if (!result.ok) {
-    return Response.json({ error: result.error }, { status: 409 });
-  }
+  if (!result.ok) return fail(result.error, 409);
   return Response.json({ ok: true });
 }
