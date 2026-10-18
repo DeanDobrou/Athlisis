@@ -29,6 +29,14 @@ const STATUS_ITEMS = {
 };
 const ROLE_ITEMS = { [ANY]: "Ρόλοι", member: "Μέλος", admin: "Διαχειριστής" };
 
+function toQuery(f: Filters): string {
+  const params = new URLSearchParams();
+  if (f.q) params.set("q", f.q);
+  if (f.status) params.set("status", f.status);
+  if (f.role) params.set("role", f.role);
+  return params.toString();
+}
+
 export function MembersToolbar({ q, status, role }: Filters) {
   const router = useRouter();
   const pathname = usePathname();
@@ -39,13 +47,22 @@ export function MembersToolbar({ q, status, role }: Filters) {
 
   useEffect(() => () => clearTimeout(debounce.current), []);
 
+  // Takes the URL's filters when it changes to something this toolbar did not send.
+  const url = toQuery({ q, status, role });
+  const [seen, setSeen] = useState(url);
+  const [sent, setSent] = useState(url);
+  if (url !== seen) {
+    setSeen(url);
+    if (url !== sent) {
+      setSent(url);
+      setFilters({ q, status, role });
+    }
+  }
+
   function navigate(next: Filters) {
-    const params = new URLSearchParams();
-    if (next.q) params.set("q", next.q);
-    if (next.status) params.set("status", next.status);
-    if (next.role) params.set("role", next.role);
     // page is deliberately dropped: changing a filter returns you to page 1.
-    const query = params.toString();
+    const query = toQuery(next);
+    setSent(query);
     startTransition(() =>
       router.replace(query ? `${pathname}?${query}` : pathname),
     );
@@ -66,9 +83,10 @@ export function MembersToolbar({ q, status, role }: Filters) {
   }
 
   function reset() {
+    const none = { q: "", status: "", role: "" };
     clearTimeout(debounce.current);
-    setFilters({ q: "", status: "", role: "" });
-    startTransition(() => router.replace(pathname));
+    setFilters(none);
+    navigate(none);
   }
 
   const hasFilters = Boolean(filters.q || filters.status || filters.role);

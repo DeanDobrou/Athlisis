@@ -22,6 +22,14 @@ const ANY = "all";
 
 const STATE_ITEMS = { [ANY]: "Κατάσταση", ...MEMBERSHIP_STATES };
 
+function toQuery(f: Filters): string {
+  const params = new URLSearchParams();
+  if (f.q) params.set("q", f.q);
+  if (f.state) params.set("state", f.state);
+  if (f.plan) params.set("plan", f.plan);
+  return params.toString();
+}
+
 export function MembershipsToolbar({
   q,
   state,
@@ -37,17 +45,26 @@ export function MembershipsToolbar({
 
   useEffect(() => () => clearTimeout(debounce.current), []);
 
+  // Takes the URL's filters when it changes to something this toolbar did not send.
+  const url = toQuery({ q, state, plan });
+  const [seen, setSeen] = useState(url);
+  const [sent, setSent] = useState(url);
+  if (url !== seen) {
+    setSeen(url);
+    if (url !== sent) {
+      setSent(url);
+      setFilters({ q, state, plan });
+    }
+  }
+
   const planItems = {
     [ANY]: "Πακέτο",
     ...Object.fromEntries(plans.map((p) => [p.id, p.name])),
   };
 
   function navigate(next: Filters) {
-    const params = new URLSearchParams();
-    if (next.q) params.set("q", next.q);
-    if (next.state) params.set("state", next.state);
-    if (next.plan) params.set("plan", next.plan);
-    const query = params.toString();
+    const query = toQuery(next);
+    setSent(query);
     startTransition(() =>
       router.replace(query ? `${pathname}?${query}` : pathname),
     );
@@ -68,9 +85,10 @@ export function MembershipsToolbar({
   }
 
   function reset() {
+    const none = { q: "", state: "", plan: "" };
     clearTimeout(debounce.current);
-    setFilters({ q: "", state: "", plan: "" });
-    startTransition(() => router.replace(pathname));
+    setFilters(none);
+    navigate(none);
   }
 
   const hasFilters = Boolean(filters.q || filters.state || filters.plan);
