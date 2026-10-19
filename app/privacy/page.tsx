@@ -1,19 +1,23 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
+
+import { gymName } from "@/lib/email";
 
 export const metadata: Metadata = {
   title: "Πολιτική απορρήτου · Athlisis",
 };
 
-// Fill in before publishing: who runs the gym, and where members write about their data.
+// Who runs the gym, and where members write about their data. The name is GYM_NAME.
 const GYM = {
-  name: "[Επωνυμία της επιχείρησης]",
-  address: "[Διεύθυνση]",
-  email: "[email επικοινωνίας]",
+  address: "Κουντουριώτου 19",
+  email: "alexisofianidis@gmail.com",
 };
-const UPDATED = "18 Οκτωβρίου 2026";
+const UPDATED = "20 Οκτωβρίου 2026";
 
 /** Public: both app stores link here, and so does the account tab in the app. */
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  // Render per request: a static page would bake in GYM_NAME from build time.
+  await connection();
   const email = (
     <a href={`mailto:${GYM.email}`} className="underline underline-offset-2">
       {GYM.email}
@@ -29,8 +33,9 @@ export default function PrivacyPage() {
 
       <Section title="Ποιοι είμαστε">
         <p>
-          Υπεύθυνο για τα δεδομένα της εφαρμογής Athlisis και του ιστότοπου as-athlisis.gr είναι
-          το {GYM.name}, {GYM.address}. Για οτιδήποτε αφορά τα στοιχεία σου, γράψε μας στο {email}.
+          Υπεύθυνος επεξεργασίας των δεδομένων της εφαρμογής Athlisis και του ιστότοπου
+          as-athlisis.gr: {gymName()}, {GYM.address}. Για οτιδήποτε αφορά τα στοιχεία σου, γράψε
+          μας στο {email}.
         </p>
       </Section>
 

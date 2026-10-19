@@ -4,10 +4,10 @@ import { createTransport, type Transporter } from "nodemailer";
 
 let transport: Transporter | null = null;
 
-/** The gym's name from GYM_NAME, for the text of an email. */
+/** The gym's name from GYM_NAME, for emails and the privacy policy. */
 export function gymName(): string {
   const name = process.env.GYM_NAME?.trim();
-  if (!name) throw new Error("GYM_NAME must be set to send email");
+  if (!name) throw new Error("GYM_NAME must be set");
   return name;
 }
 
