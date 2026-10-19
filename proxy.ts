@@ -29,6 +29,8 @@ export async function proxy(request: NextRequest) {
   // bounces revoked-but-unexpired sessions here, and a signed-in →
   // /dashboard convenience redirect would turn that bounce into a loop.
   if (request.nextUrl.pathname === "/login") return NextResponse.next();
+  // The privacy policy is public: the app stores and the app's account tab link to it.
+  if (request.nextUrl.pathname === "/privacy") return NextResponse.next();
 
   if (!(await hasAdminSession(request))) {
     return NextResponse.redirect(new URL("/login", request.url));

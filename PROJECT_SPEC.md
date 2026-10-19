@@ -788,8 +788,9 @@ or install PowerShell 7 / use Git Bash.)
 
 **Nobody signs themselves up.** There is no registration form, no public
 sign-up, no invite-accept flow. The only route into the database is an admin
-creating the account. The app has exactly one unauthenticated screen: the
-login form.
+creating the account. The app has two unauthenticated screens: the login
+form, and the privacy policy at `/privacy`, which both app stores and the
+mobile app's account tab link to.
 
 - **Admins** are created directly as a database row - no UI.
   `003_demo_admin.sql` seeds one, `demo@admin.com`, so a fresh database can be
@@ -929,6 +930,7 @@ Cloudflare.
 | `lib/flash.ts` | `redirectSaved()`: every form save redirects through it, leaving the cookie `FlashToast` reads | done |
 | `app/login/login-form.tsx` | client form on `ActionForm`, errors at the top | done |
 | `app/login/page.tsx` | login card | done |
+| `app/privacy/page.tsx` | public privacy policy; `#delete` is the account-deletion section; fill in `GYM` before deploying | done |
 | `app/(admin)/layout.tsx` | sidebar shell; deliberately holds **no** auth check | done |
 | `app/(admin)/dashboard/page.tsx` | calls `requireAdmin()`; otherwise a stub | stub |
 | `components/app-sidebar.tsx` | nav, profile and sign out; links to unbuilt routes | done |
