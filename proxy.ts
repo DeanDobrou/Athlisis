@@ -41,5 +41,5 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Excluding the static paths matters: guard them and the login page loads
   // with its own CSS redirected away, which looks like a broken app.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icon.png|apple-icon.jpg).*)"],
 };
