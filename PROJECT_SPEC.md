@@ -936,6 +936,7 @@ Cloudflare.
 | `lib/session.ts` | JWT cookie sign/verify, `requireAdmin()` - the real gate | done |
 | `lib/rate-limit.ts` | in-memory login throttle | done |
 | `lib/api.ts` | the API routes' shared replies: `fail`, `signedOut`, `throttled`, `jsonBody`; `requireAdminApi`, the gate for every route under `/api/admin` (401 signed out, 403 not an admin), which `check:auth` fails any handler there for skipping; `refused`, a lib refusal as 400 when it names a field and 409 when it does not | done |
+| `app/api/admin/today/route.ts` | the phone's Σήμερα, from `adminToday()` in `lib/dashboard.ts`: who is booked today on an unpaid membership, and today's classes as upcoming (the running one marked `is_now`) and finished (newest first), each with who is booked and who is on an unpaid membership; checked by `npm run check:dashboard` | done |
 | `proxy.ts` | optimistic route guard (Next 16 renamed `middleware`) | done |
 | `app/actions/auth.ts` | `login` / `logout` Server Actions | done |
 | `lib/members.ts` | member queries and writes: create, update, delete with its guards, welcome email, the admin's own profile | done |

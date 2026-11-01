@@ -8,8 +8,15 @@
  */
 import { check, client, newId, run } from "./check.mts";
 
-const { listOwed, listRenewals, listToday, listQuiet, monthTake, QUIET_DAYS } =
-  await import("@/lib/dashboard");
+const {
+  adminToday,
+  listOwed,
+  listRenewals,
+  listToday,
+  listQuiet,
+  monthTake,
+  QUIET_DAYS,
+} = await import("@/lib/dashboard");
 
 await run(async () => {
   const user = (tag: string, daysOld = 0) =>
@@ -141,6 +148,95 @@ await run(async () => {
     check(
       mine !== undefined && mine.capacity === 8 && mine.start_time === "18:00",
       "and reports the hour and the capacity",
+    );
+  }
+
+  // ----- the phone's Σήμερα --------------------------------------------
+  {
+    // now() is fixed for the transaction; every class sits inside today
+    // whatever the hour the check runs at.
+    const midnight = "current_date::timestamptz";
+    const tomorrow = "(current_date + 1)::timestamptz";
+    const at = (starts: string, ends: string, status = "scheduled") =>
+      newId(
+        `INSERT INTO class_sessions (starts_at, ends_at, capacity, status)
+         VALUES (${starts}, ${ends}, 8, $1) RETURNING id`,
+        [status],
+      );
+    const sinceMidnight = `(now() - ${midnight})`;
+    const early = await at(midnight, `${midnight} + ${sinceMidnight} / 4`);
+    const later = await at(`${midnight} + ${sinceMidnight} / 4`, `${midnight} + ${sinceMidnight} / 2`);
+    const running = await at("now()", "now() + interval '1 hour'");
+    const soon = `now() + (${tomorrow} - now()) / 2`;
+    const ahead = await at(soon, `${soon} + interval '1 hour'`);
+    const off = await at(soon, `${soon} + interval '1 hour'`, "cancelled");
+    const offNow = await at("now()", "now() + interval '1 hour'", "cancelled");
+
+    const pack = await plan(10, 6000);
+    const paying = await user("now-paying");
+    await booking(paying, running, await membership(paying, pack, 9));
+    const promised = await user("now-promised");
+    const promise = await membership(promised, pack, 9, { paid: false, amount: 6000 });
+    await booking(promised, running, promise);
+    const elsewhere = await user("now-owes-elsewhere");
+    await booking(elsewhere, early, await membership(elsewhere, pack, 9));
+    await membership(elsewhere, pack, 10, { startsIn: 5, paid: false });
+    const left = await user("now-left");
+    await booking(left, ahead, await membership(left, pack, 9), "cancelled");
+
+    const today = await adminToday(client);
+    const ids = (list: { id: string }[]) => list.map((c) => Number(c.id));
+    const up = ids(today.upcoming);
+    const done = ids(today.finished);
+    check(
+      done.includes(early) && done.includes(later) && !up.includes(early),
+      "Σήμερα puts a class that ended earlier today under finished",
+    );
+    check(
+      done.indexOf(later) !== -1 && done.indexOf(later) < done.indexOf(early),
+      "finished classes come newest first",
+    );
+    check(
+      up.indexOf(running) !== -1 &&
+        up.indexOf(running) < up.indexOf(ahead) &&
+        !done.includes(running),
+      "the running class is upcoming, before the ones still to start",
+    );
+    const cls = (id: number) => today.upcoming.find((c) => Number(c.id) === id);
+    check(
+      cls(running)?.is_now === true &&
+        cls(ahead)?.is_now === false &&
+        cls(offNow)?.is_now === false,
+      "and only the running one is marked as now, not one cancelled at that hour",
+    );
+    check(
+      cls(off)?.status === "cancelled",
+      "a cancelled class is still listed, marked cancelled",
+    );
+
+    const flag = (id: number, u: number) =>
+      cls(id)?.people.find((p) => Number(p.user_id) === u)?.unpaid;
+    check(
+      flag(running, paying) === false && flag(running, promised) === true,
+      "each class lists who is booked, flagging who is on an unpaid membership",
+    );
+    check(
+      cls(ahead)?.people.length === 0,
+      "a cancelled booking is not listed",
+    );
+
+    const pay = today.pays.find((p) => Number(p.membership_id) === promise);
+    check(
+      pay?.member_name === "Dash now-promised" &&
+        pay.amount_cents === 6000 &&
+        pay.plan_name === "dash plan" &&
+        pay.start_time === cls(running)?.start_time,
+      "pays lists the member on an unpaid membership with its plan, amount and class time",
+    );
+    const payers = today.pays.map((p) => p.member_name);
+    check(
+      !payers.includes("Dash now-paying") && !payers.includes("Dash now-owes-elsewhere"),
+      "but not a member booked today on a paid membership, even one who owes for another",
     );
   }
 

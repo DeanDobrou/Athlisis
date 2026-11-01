@@ -278,6 +278,40 @@ export async function listSessionBookings(
   return rows;
 }
 
+export type ClassRoster = ClassSession & {
+  is_now: boolean;
+  people: WeekBooking[];
+};
+
+/**
+ * Today's classes in order, each with whether it is running now and the
+ * bookings holding a place on it, in the order the board lists them.
+ */
+export async function listTodayRosters(
+  runner: Queryable = db(),
+): Promise<ClassRoster[]> {
+  const { rows: classes } = await runner.query<ClassSession & { is_now: boolean }>(
+    `SELECT ${COLUMNS},
+            (s.status = 'scheduled'
+              AND s.starts_at <= now() AND now() <= s.ends_at) AS is_now
+     ${FROM}
+     WHERE s.starts_at >= current_date AND s.starts_at < current_date + 1
+     GROUP BY s.id
+     ORDER BY s.starts_at`,
+  );
+  const { rows: bookings } = await runner.query<WeekBooking>(
+    `SELECT ${BOOKING_COLUMNS}
+     ${BOOKING_FROM}
+     WHERE s.starts_at >= current_date AND s.starts_at < current_date + 1
+       AND b.status IN ${HOLDS_A_PLACE}
+     ORDER BY b.booked_at, b.id`,
+  );
+  return classes.map((c) => ({
+    ...c,
+    people: bookings.filter((b) => b.session_id === c.id),
+  }));
+}
+
 const HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 type ParsedSession = {

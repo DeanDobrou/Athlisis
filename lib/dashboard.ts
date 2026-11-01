@@ -1,6 +1,7 @@
 import "server-only";
 
 import { HOLDS_A_PLACE } from "@/lib/bookings";
+import { type ClassRoster, listTodayRosters } from "@/lib/class-sessions";
 import { db, type Queryable } from "@/lib/db";
 import type { MembershipState } from "@/lib/enums";
 import { coversDate, membershipState } from "@/lib/memberships";
@@ -214,4 +215,61 @@ export async function monthTake(
      WHERE paid_on >= date_trunc('month', current_date)::date`,
   );
   return rows[0];
+}
+
+export type TodayPay = {
+  membership_id: string;
+  member_name: string;
+  plan_name: string;
+  amount_cents: number;
+  start_time: string;
+};
+
+/**
+ * Who is booked today on an unpaid membership, in class order: the people to
+ * collect from at the door. The same rows the class rosters flag as unpaid.
+ */
+export async function listTodayPays(
+  runner: Queryable = db(),
+): Promise<TodayPay[]> {
+  const { rows } = await runner.query<TodayPay>(
+    `SELECT m.id AS membership_id,
+            u.first_name || ' ' || u.last_name AS member_name,
+            p.name AS plan_name, m.amount_cents,
+            to_char(s.starts_at, 'HH24:MI') AS start_time
+     FROM bookings b
+     JOIN class_sessions s ON s.id = b.class_session_id
+     JOIN users u ON u.id = b.user_id
+     JOIN memberships m ON m.id = b.membership_id
+     JOIN plans p ON p.id = m.plan_id
+     WHERE s.starts_at >= current_date AND s.starts_at < current_date + 1
+       AND b.status IN ${HOLDS_A_PLACE}
+       AND (${membershipState("m")}) = 'unpaid'
+     ORDER BY s.starts_at, u.last_name, u.first_name, b.id`,
+  );
+  return rows;
+}
+
+export type AdminToday = {
+  pays: TodayPay[];
+  upcoming: ClassRoster[];
+  finished: ClassRoster[];
+};
+
+/**
+ * The phone's Σήμερα: who pays today, the classes still to run (the running
+ * one included) in order, and the finished ones newest first.
+ */
+export async function adminToday(
+  runner: Queryable = db(),
+): Promise<AdminToday> {
+  const [pays, classes] = await Promise.all([
+    listTodayPays(runner),
+    listTodayRosters(runner),
+  ]);
+  return {
+    pays,
+    upcoming: classes.filter((c) => !c.is_past),
+    finished: classes.filter((c) => c.is_past).reverse(),
+  };
 }
