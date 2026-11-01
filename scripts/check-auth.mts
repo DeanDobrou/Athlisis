@@ -2,6 +2,10 @@
  * Who may log in where, and what a token is worth afterwards, against the real
  * database and rolled back:  npm run check:auth
  */
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { check, client, newId, run } from "./check.mts";
 
 const {
@@ -23,6 +27,7 @@ const {
   parseMemberFields,
 } = await import("@/lib/members");
 const { hashPassword } = await import("@/lib/password");
+const { requireAdminApi } = await import("@/lib/api");
 const { SignJWT } = await import("jose");
 
 const email = (tag: string) => `check-auth-${tag}@test.local`;
@@ -128,6 +133,47 @@ await run(async () => {
   check(
     (await gate(`Bearer ${await tokenFor(member, "admin")}`))?.role === "member",
     "the role comes from the database, not the token claim",
+  );
+
+  const adminGate = async (authorization?: string) => {
+    const r = await requireAdminApi(request(authorization), client);
+    return r instanceof Response ? r.status : r.userId;
+  };
+  check(
+    (await adminGate(`Bearer ${await tokenFor(admin, "admin")}`)) === admin,
+    "the admin API lets an admin in",
+  );
+  check(
+    (await adminGate(`Bearer ${token}`)) === 403,
+    "the admin API refuses a member's token",
+  );
+  check(
+    (await adminGate(`Bearer ${await tokenFor(member, "admin")}`)) === 403,
+    "even one whose claim says admin",
+  );
+  check(
+    (await adminGate()) === 401,
+    "and answers a request with no token as signed out",
+  );
+
+  // proxy.ts skips /api, so each handler under /api/admin must call the gate itself.
+  const adminDir = fileURLToPath(new URL("../app/api/admin/", import.meta.url));
+  const ungated = existsSync(adminDir)
+    ? readdirSync(adminDir, { recursive: true })
+        .map(String)
+        .filter((f) => /(^|[\\/])route\.ts$/.test(f))
+        .filter((f) => {
+          const src = readFileSync(join(adminDir, f), "utf8");
+          const count = (re: RegExp) => src.match(re)?.length ?? 0;
+          return (
+            count(/requireAdminApi\(/g) <
+            count(/export (async function|const) (GET|POST|PATCH|PUT|DELETE)\b/g)
+          );
+        })
+    : [];
+  check(
+    ungated.length === 0,
+    `every handler under /api/admin calls requireAdminApi${ungated.length ? ` (not: ${ungated.join(", ")})` : ""}`,
   );
 
   // A token minted before 005 existed carries no version claim at all.

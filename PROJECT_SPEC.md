@@ -935,7 +935,7 @@ Cloudflare.
 | `lib/password.ts` | scrypt hash/verify; run directly to mint a hash | done |
 | `lib/session.ts` | JWT cookie sign/verify, `requireAdmin()` - the real gate | done |
 | `lib/rate-limit.ts` | in-memory login throttle | done |
-| `lib/api.ts` | the API routes' shared replies: `fail`, `signedOut`, `throttled`, `jsonBody` | done |
+| `lib/api.ts` | the API routes' shared replies: `fail`, `signedOut`, `throttled`, `jsonBody`; `requireAdminApi`, the gate for every route under `/api/admin` (401 signed out, 403 not an admin), which `check:auth` fails any handler there for skipping; `refused`, a lib refusal as 400 when it names a field and 409 when it does not | done |
 | `proxy.ts` | optimistic route guard (Next 16 renamed `middleware`) | done |
 | `app/actions/auth.ts` | `login` / `logout` Server Actions | done |
 | `lib/members.ts` | member queries and writes: create, update, delete with its guards, welcome email, the admin's own profile | done |
