@@ -197,6 +197,11 @@ export function MembershipForm({
             defaultValue={membership.visits_remaining ?? ""}
             placeholder={`Κενό: όσες δίνει το πακέτο (${plan?.visits ?? "απεριόριστες"})`}
           />
+          <input
+            type="hidden"
+            name="visits_shown"
+            value={membership.visits_remaining ?? ""}
+          />
         </FormField>
       )}
 

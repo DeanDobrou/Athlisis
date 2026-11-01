@@ -33,9 +33,6 @@ export const MEMBER_CANCEL_CUTOFF_MINUTES = 60;
 /** Members may check in from this many minutes before a class starts until it ends. */
 export const MEMBER_CHECK_IN_OPENS_MINUTES = 10;
 
-export const TRAINED_ON_UNPAID_MEMBERSHIP =
-  "Το μέλος προπονήθηκε με αυτή τη συνδρομή, οπότε χρωστάει. Κατάγραψε την πληρωμή αντί να τη διαγράψεις.";
-
 type Refused = { ok: false; error: string };
 
 /** The member lock for whoever a row belongs to; only the member row is locked. */
@@ -601,10 +598,8 @@ export async function moveBooking(
 }
 
 /**
- * Deletes an unpaid membership and the bookings made against it: a promise
- * nobody kept should free the class spot it was holding. Refused for a paid
- * membership, which is the only record that cash was taken, and for one the
- * member already trained on, which is a debt and attendance history.
+ * Deletes an unpaid membership and all its bookings. Refused for a paid one,
+ * and for one with a booking on a class that has started or a check-in.
  */
 export async function voidUnpaidMembership(
   client: PoolClient,
@@ -614,8 +609,11 @@ export async function voidUnpaidMembership(
   if (userId === null) return { ok: false, error: "Άγνωστη συνδρομή." };
 
   // Re-read under the member lock: it could have been paid since.
-  const { rows: row } = await client.query<{ paid: boolean }>(
-    "SELECT paid_on IS NOT NULL AS paid FROM memberships WHERE id = $1 FOR UPDATE",
+  const { rows: row } = await client.query<{
+    paid: boolean;
+    amount_cents: number;
+  }>(
+    "SELECT paid_on IS NOT NULL AS paid, amount_cents FROM memberships WHERE id = $1 FOR UPDATE",
     [membershipId],
   );
   if (row.length === 0) return { ok: false, error: "Άγνωστη συνδρομή." };
@@ -627,18 +625,66 @@ export async function voidUnpaidMembership(
     };
   }
 
-  const { rowCount: attended } = await client.query(
-    "SELECT 1 FROM bookings WHERE membership_id = $1 AND status = 'checked_in' LIMIT 1",
+  const { rows: attended } = await client.query<{ day: string }>(
+    `SELECT to_char(s.starts_at, 'DD/MM') AS day
+     FROM bookings b JOIN class_sessions s ON s.id = b.class_session_id
+     WHERE b.membership_id = $1 AND b.status <> 'cancelled'
+       AND (s.starts_at <= now() OR b.status = 'checked_in')
+     ORDER BY s.starts_at LIMIT 1`,
     [membershipId],
   );
-  if (attended) return { ok: false, error: TRAINED_ON_UNPAID_MEMBERSHIP };
+  if (attended.length > 0) {
+    return {
+      ok: false,
+      error: `Το μέλος έκανε ήδη μάθημα (${attended[0].day}) με αυτή τη συνδρομή και χρωστάει ${formatMoney(row[0].amount_cents)}. Δεν διαγράφεται, μόνο εξοφλείται.`,
+    };
+  }
 
-  await client.query(
-    "DELETE FROM bookings WHERE membership_id = $1 AND status <> 'checked_in'",
-    [membershipId],
-  );
+  await client.query("DELETE FROM bookings WHERE membership_id = $1", [
+    membershipId,
+  ]);
   await client.query("DELETE FROM memberships WHERE id = $1", [membershipId]);
   return { ok: true, userId };
+}
+
+/**
+ * The visits a membership keeps after an edit, null for unlimited. `typed` is
+ * what staff typed: null if they cleared the field, undefined if left as shown.
+ */
+export async function visitsAfterEdit(
+  client: PoolClient,
+  membershipId: number,
+  planId: number,
+  typed: number | null | undefined,
+): Promise<{ ok: true; visits: number | null } | Refused> {
+  const { rows } = await client.query<{
+    switched: boolean;
+    kept: number | null;
+    name: string;
+    visits: number | null;
+    used: number;
+  }>(
+    `SELECT m.plan_id <> p.id AS switched, m.visits_remaining AS kept,
+            p.name, p.visits,
+            (SELECT count(*)::int FROM bookings b
+             WHERE b.membership_id = m.id AND b.status IN ${HOLDS_A_PLACE}) AS used
+     FROM memberships m, plans p
+     WHERE m.id = $1 AND p.id = $2`,
+    [membershipId, planId],
+  );
+  if (rows.length === 0) return { ok: false, error: "Άγνωστο πακέτο." };
+  const { switched, kept, name, visits, used } = rows[0];
+
+  if (typeof typed === "number") return { ok: true, visits: typed };
+  if (!switched) return { ok: true, visits: typed === null ? visits : kept };
+  if (visits === null) return { ok: true, visits: null };
+  if (used > visits) {
+    return {
+      ok: false,
+      error: `Η συνδρομή έχει ${used} κρατήσεις και το πακέτο ${name} καλύπτει ${visits}. Διάλεξε πακέτο με τουλάχιστον ${used} επισκέψεις.`,
+    };
+  }
+  return { ok: true, visits: visits - used };
 }
 
 export type CancelSessionResult =

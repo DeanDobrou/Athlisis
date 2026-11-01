@@ -290,6 +290,13 @@ short months, so 31 January becomes 28 February. A `one_time` visit pack has
 no end date at all - it is consumed by count. `visits_remaining` is seeded from
 `plans.visits` the same way, and a blank field on the update form re-seeds from
 the plan rather than writing NULL, which would silently mean unlimited.
+The form also sends the number it showed, and a field still holding it counts
+as untouched, since a member may book while the form is open: on the same plan
+the stored count stays, so that booking stays spent. Switching to another plan,
+unless staff typed a new number, sets it to the new plan's count less the
+bookings already on it (`visitsAfterEdit()`), and is refused when those
+bookings outnumber the new plan. A request with no visits field at all counts
+as untouched.
 
 **Everything the app calls "today" means today in Athens.** The Postgres
 container defaults to UTC and Greece is UTC+3 in summer, so between midnight
@@ -324,7 +331,7 @@ it.
 **The grid shows a derived state, not the stored status.** One column,
 computed on every read by `membershipState()`, from the same three columns plus
 `paid_on`: `Active`, `Unpaid` (money not collected), `Completed` (period
-passed), `Scheduled` (not begun), `Inactive` (set by staff). It is not a
+passed, or a pack with no visits left), `Scheduled` (not begun), `Inactive` (set by staff). It is not a
 coverage check - see "The badge is not a coverage check" below. Nothing writes
 it, so there is no nightly job to run and nothing to go stale - a membership
 reads as Completed the morning after its period ends, on its own.
@@ -487,13 +494,15 @@ A paid row entered by mistake is edited, or has its date cleared first, which
 is the right amount of friction for deleting a receipt.
 
 **Voiding takes the promise's bookings with it** - an unkept promise should
-free the class spot it was holding - but only bookings nobody attended. If the
-member already checked in on it, they trained on the promise: that is a debt
-and attendance history, so the void is refused and staff record the payment
-instead. `voidUnpaidMembership` locks the member, re-reads `paid_on` under the
-lock, and deletes only bookings that were not checked in. If a check-in commits
-in the narrow gap, that booking survives and the membership delete fails on the
-bookings foreign key, which the action reports instead of losing the check-in.
+free the class spot it was holding - but only while none of its classes has
+happened. A booking on a class that has started, or one checked in, means the
+member trained on the promise: that is a debt and attendance history, so the
+void is refused, naming the class date and the amount, and staff collect
+instead. With check-in off nothing is ever checked in, so the start time is
+the test. A booking cancelled before its class does not count and is deleted
+with the membership. `voidUnpaidMembership` locks the member and re-reads
+`paid_on` under the lock, so nothing can be booked or checked in between the
+test and the delete.
 
 **A zero-priced plan is never created by booking.** With no coverage the
 booking copies the plan last held, and on a free plan there is no promise to

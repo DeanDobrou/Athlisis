@@ -3,10 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import {
-  TRAINED_ON_UNPAID_MEMBERSHIP,
-  voidUnpaidMembership,
-} from "@/lib/bookings";
+import { visitsAfterEdit, voidUnpaidMembership } from "@/lib/bookings";
 import { hasPgCode, withTransaction } from "@/lib/db";
 import { isMembershipStatus, isPaymentMethod } from "@/lib/enums";
 import { redirectSaved } from "@/lib/flash";
@@ -165,8 +162,10 @@ export async function updateMembership(
   if ("error" in f) return f;
 
   const rawVisits = String(formData.get("visits_remaining") ?? "").trim();
-  let visitsRemaining: number | null = null;
-  if (rawVisits) {
+  const untouched =
+    rawVisits === String(formData.get("visits_shown") ?? "").trim();
+  let visitsRemaining: number | null | undefined = untouched ? undefined : null;
+  if (rawVisits && !untouched) {
     const n = Number(rawVisits);
     if (!Number.isSafeInteger(n) || n < 0) {
       return { field: "visits_remaining", error: "Οι υπόλοιπες επισκέψεις πρέπει να είναι μηδέν ή ακέραιος αριθμός." };
@@ -213,11 +212,14 @@ export async function updateMembership(
         if (clash) return overlapRefusal(clash);
       }
 
+      const visits = await visitsAfterEdit(client, id, f.planId, visitsRemaining);
+      if (!visits.ok) return { field: "plan_id", error: visits.error };
+
       const { rowCount } = await client.query(
         `UPDATE memberships m SET
            user_id = $2, plan_id = $4, status = $3, starts_on = $1::date,
            ends_on = ${periodEndsOn("$1")},
-           visits_remaining = COALESCE($5, p.visits),
+           visits_remaining = $5,
            amount_cents = $7, method = $8, paid_on = $9::date,
            recorded_by = CASE WHEN $9::date IS NULL THEN NULL
                               ELSE COALESCE(m.recorded_by, $10::bigint) END
@@ -228,7 +230,7 @@ export async function updateMembership(
           f.userId,
           f.status,
           f.planId,
-          visitsRemaining,
+          visits.visits,
           id,
           f.amountCents,
           f.method,
@@ -272,12 +274,7 @@ export async function deleteMembership(
 
   const result = await withTransaction((client) =>
     voidUnpaidMembership(client, id),
-  ).catch((err: unknown) => {
-    if (hasPgCode(err, "23503")) {
-      return { ok: false as const, error: TRAINED_ON_UNPAID_MEMBERSHIP };
-    }
-    throw err;
-  });
+  );
   if (!result.ok) return { error: result.error };
 
   revalidatePath(`/members/${result.userId}`);

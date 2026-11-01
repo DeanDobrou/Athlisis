@@ -86,8 +86,7 @@ export function membershipState(alias = "m"): string {
     WHEN ${alias}.status <> 'active' THEN 'inactive'
     WHEN ${alias}.paid_on IS NULL THEN 'unpaid'
     WHEN ${alias}.starts_on > current_date THEN 'scheduled'
-    WHEN ${alias}.ends_on IS NOT NULL AND ${alias}.ends_on < current_date
-      THEN 'completed'
+    WHEN ${finished(alias)} THEN 'completed'
     ELSE 'active'
   END`;
 }
