@@ -3,36 +3,24 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { endsSessions, type Session } from "@/lib/auth";
-import { db, hasPgCode, withTransaction } from "@/lib/db";
-import { redirectSaved, type Flash } from "@/lib/flash";
-import {
-  issueTemporaryPassword,
-  memberFieldsProblem,
-  parseMemberFields,
-  sendWelcomeEmail,
-  type MemberFields,
-} from "@/lib/members";
-import { countMemberships } from "@/lib/memberships";
-import {
-  generatePassword,
-  hashPassword,
-  passwordProblem,
-} from "@/lib/password";
+import type { Session } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { redirectSaved } from "@/lib/flash";
+import * as members from "@/lib/members";
 import { createSession, requireAdmin } from "@/lib/session";
-import { type ActionResult, parseId } from "@/lib/utils";
+import {
+  type ActionResult,
+  type FormError,
+  formFields,
+  parseId,
+} from "@/lib/utils";
 
-export type MemberFormState = { error: string; field?: string } | undefined;
+export type MemberFormState = FormError | undefined;
 
-
-type Fields = MemberFields;
-
-const parseFields = (formData: FormData) =>
-  parseMemberFields((key) => String(formData.get(key) ?? ""));
-const validate = memberFieldsProblem;
-
-const isDuplicateEmail = (err: unknown) => hasPgCode(err, "23505");
-const isStillReferenced = (err: unknown) => hasPgCode(err, "23503");
+const FLASH = {
+  sent: "welcome-sent",
+  failed: "welcome-failed",
+} as const;
 
 export async function createMember(
   _prev: MemberFormState,
@@ -40,72 +28,19 @@ export async function createMember(
 ): Promise<MemberFormState> {
   await requireAdmin();
 
-  const f = parseFields(formData);
-  const invalid = validate(f);
-  if (invalid) return invalid;
-
-  const isAdmin = f.role === "admin";
-  const welcome =
-    !isAdmin && formData.get("send_welcome_email") !== null;
-
-  // A member gets a generated password and replaces it on their first login.
-  // An admin's password is typed on the form.
-  const password = isAdmin
-    ? String(formData.get("password") ?? "")
-    : generatePassword();
-  if (isAdmin) {
-    const problem = passwordProblem(password);
-    if (problem) return { field: "password", error: problem };
-  }
-  const passwordHash = await hashPassword(password);
-
-  let memberId: string;
-  try {
-    const { rows } = await db().query<{ id: string }>(
-      `INSERT INTO users
-         (email, password_hash, first_name, last_name, phone, role,
-          date_of_birth, must_change_password)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id`,
-      [
-        f.email,
-        passwordHash,
-        f.firstName,
-        f.lastName,
-        f.phone,
-        f.role,
-        f.dateOfBirth,
-        !isAdmin,
-      ],
-    );
-    memberId = rows[0].id;
-  } catch (err) {
-    if (isDuplicateEmail(err)) {
-      return { field: "email", error: "Αυτό το email χρησιμοποιείται ήδη." };
-    }
-    throw err;
-  }
-
-  // The plaintext exists only inside this function, so the send happens here.
-  let flash: Flash = "saved";
-  if (welcome) {
-    try {
-      await sendWelcomeEmail(f.email, f.firstName, password);
-      flash = "welcome-sent";
-    } catch (err) {
-      console.error("welcome email failed", err);
-      flash = "welcome-failed";
-    }
-  }
+  const result = await members.createMember(
+    formFields(formData),
+    formData.get("send_welcome_email") !== null,
+  );
+  if ("error" in result) return result;
 
   revalidatePath("/members");
-  await redirectSaved(`/members/${memberId}`, flash);
+  await redirectSaved(
+    `/members/${result.id}`,
+    result.welcome ? FLASH[result.welcome] : "saved",
+  );
 }
 
-/**
- * Emails an existing member the welcome email with a new temporary password.
- * The new password is kept only if the email went out.
- */
 export async function resendWelcomeEmail(
   rawId: string,
 ): Promise<ActionResult> {
@@ -114,76 +49,7 @@ export async function resendWelcomeEmail(
   const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστο μέλος." };
 
-  try {
-    const sent = await withTransaction(async (client) => {
-      const issued = await issueTemporaryPassword(client, id);
-      if (issued) {
-        await sendWelcomeEmail(issued.email, issued.first_name, issued.password);
-      }
-      return issued !== null;
-    });
-    if (!sent) {
-      return { error: "Το email καλωσορίσματος στέλνεται μόνο σε ενεργά μέλη." };
-    }
-  } catch (err) {
-    console.error("welcome email failed", err);
-    return {
-      error: "Το email δεν στάλθηκε, οπότε ο κωδικός του μέλους δεν άλλαξε.",
-    };
-  }
-  return { notice: "Στάλθηκε email καλωσορίσματος με νέο προσωρινό κωδικό." };
-}
-
-/**
- * The write both update forms share. A blank password leaves the current one
- * alone. `access` is null for the profile, which keeps role and status exactly
- * as they are.
- */
-async function saveUser(
-  id: number,
-  f: Fields,
-  formData: FormData,
-  access: { role: string; status: string } | null,
-): Promise<MemberFormState> {
-  const password = String(formData.get("password") ?? "");
-  const problem = password ? passwordProblem(password) : null;
-  if (problem) return { field: "password", error: problem };
-  const passwordHash = password ? await hashPassword(password) : null;
-  const bump = endsSessions(passwordHash !== null, access?.status ?? null)
-    ? 1
-    : 0;
-
-  try {
-    const { rowCount } = await db().query(
-      `UPDATE users SET
-         email = $1, first_name = $2, last_name = $3, phone = $4,
-         date_of_birth = $5,
-         role = COALESCE($6::user_role, role),
-         status = COALESCE($7::user_status, status),
-         password_hash = COALESCE($8, password_hash),
-         token_version = token_version + $9
-       WHERE id = $10`,
-      [
-        f.email,
-        f.firstName,
-        f.lastName,
-        f.phone,
-        f.dateOfBirth,
-        access?.role ?? null,
-        access?.status ?? null,
-        passwordHash,
-        bump,
-        id,
-      ],
-    );
-    if (rowCount === 0) return { error: "Άγνωστο μέλος." };
-  } catch (err) {
-    if (isDuplicateEmail(err)) {
-      return { field: "email", error: "Αυτό το email χρησιμοποιείται ήδη." };
-    }
-    throw err;
-  }
-  return undefined;
+  return members.resendWelcomeEmail(id);
 }
 
 /**
@@ -212,19 +78,8 @@ export async function updateMember(
   const id = parseId(String(formData.get("id") ?? ""));
   if (id === null) return { error: "Άγνωστο μέλος." };
 
-  const f = parseFields(formData);
-  const invalid = validate(f);
-  if (invalid) return invalid;
-
-  const status =
-    String(formData.get("status") ?? "") === "inactive" ? "inactive" : "active";
-
-  if (id === admin.userId && (status === "inactive" || f.role !== "admin")) {
-    return { error: "Δεν μπορείς να αφαιρέσεις τα δικά σου δικαιώματα διαχειριστή." };
-  }
-
-  const refused = await saveUser(id, f, formData, { role: f.role, status });
-  if (refused) return refused;
+  const failed = await members.updateMember(id, formFields(formData), admin.userId);
+  if (failed) return failed;
   await keepOwnSessionAlive(admin, id);
 
   revalidatePath("/members");
@@ -243,12 +98,8 @@ export async function updateProfile(
 ): Promise<MemberFormState> {
   const admin = await requireAdmin();
 
-  const f = parseFields(formData);
-  const invalid = validate(f);
-  if (invalid) return invalid;
-
-  const refused = await saveUser(admin.userId, f, formData, null);
-  if (refused) return refused;
+  const failed = await members.updateProfile(admin.userId, formFields(formData));
+  if (failed) return failed;
   await keepOwnSessionAlive(admin, admin.userId);
 
   revalidatePath("/members");
@@ -263,31 +114,9 @@ export async function deleteMember(
 
   const id = parseId(rawId);
   if (id === null) return { error: "Άγνωστο μέλος." };
-  if (id === admin.userId) {
-    return { error: "Δεν μπορείς να διαγράψεις τον δικό σου λογαριασμό." };
-  }
 
-  if (await countMemberships(id)) {
-    return {
-      error:
-        "Το μέλος έχει ιστορικό συνδρομών και δεν μπορεί να διαγραφεί. Κάνε το μέλος ανενεργό αντί να το διαγράψεις.",
-    };
-  }
-
-  try {
-    const { rowCount } = await db().query("DELETE FROM users WHERE id = $1", [
-      id,
-    ]);
-    if (rowCount === 0) return { error: "Άγνωστο μέλος." };
-  } catch (err) {
-    if (isStillReferenced(err)) {
-      return {
-        error:
-          "Το μέλος έχει κρατήσεις, μαθήματα, WOD ή ιστορικό συνδρομών και δεν μπορεί να διαγραφεί.",
-      };
-    }
-    throw err;
-  }
+  const failed = await members.deleteMember(id, admin.userId);
+  if (failed) return failed;
 
   revalidatePath("/members");
   redirect("/members");

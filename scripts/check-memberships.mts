@@ -14,14 +14,20 @@ import {
   THU,
   TUE,
   user,
+  visitsOf,
   WED,
 } from "./fixtures.mts";
 
 const { cancelBooking, visitsAfterEdit, voidUnpaidMembership } = await import(
   "@/lib/bookings"
 );
-const { findOverlap, memberHistory, memberMemberships, membershipState } =
-  await import("@/lib/memberships");
+const {
+  findOverlap,
+  memberHistory,
+  memberMemberships,
+  membershipState,
+  updateMembership,
+} = await import("@/lib/memberships");
 
 await run(async () => {
   const pack1 = await plan(1, 1000);
@@ -186,6 +192,23 @@ await run(async () => {
     check(
       moved.ok && moved.visits === 8,
       "and a switch counts it too",
+    );
+
+    const form: Record<string, string> = {
+      user_id: String(u),
+      plan_id: String(pack12),
+      status: "active",
+      starts_on: "2031-01-01",
+      amount: "50",
+      method: "cash",
+      paid_on: "2031-01-01",
+      visits_remaining: "11",
+      visits_shown: "11",
+    };
+    const saved = await updateMembership(client, m, (k) => form[k] ?? "", u);
+    check(
+      !("error" in saved) && (await visitsOf(m)) === 10,
+      "saving the edit form with the field untouched keeps the visits the database has",
     );
   }
 

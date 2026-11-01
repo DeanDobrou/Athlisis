@@ -40,6 +40,17 @@ export const CALL_FAILED =
 /** What a button's Server Action returns: why it refused, a notice to show, or nothing. */
 export type ActionResult = { error: string } | { notice: string } | undefined
 
+/** Why a save was refused, naming the field to show it under when there is one. */
+export type FormError = { error: string; field?: string }
+
+/** Reads a submitted field as raw text, "" when it was not sent. */
+export type Fields = (key: string) => string
+
+export const formFields =
+  (formData: FormData): Fields =>
+  (key) =>
+    String(formData.get(key) ?? "")
+
 /**
  * Runs a Server Action from the client and turns a call that throws into the
  * ordinary refusal every caller here already handles. Without it a stale tab

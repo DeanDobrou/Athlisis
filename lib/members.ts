@@ -1,19 +1,32 @@
 import "server-only";
 
-import type { Role } from "@/lib/auth";
+import { endsSessions, type Role } from "@/lib/auth";
 import {
   db,
   greekFold,
+  hasPgCode,
   likeLiteral,
   type Page,
   paginate,
   type Queryable,
+  withTransaction,
 } from "@/lib/db";
 import { gymName, sendEmail } from "@/lib/email";
 import { issueCode, spendCode } from "@/lib/email-codes";
 import { isRealDate, todayInGym } from "@/lib/gym-time";
-import { generatePassword, hashPassword, verifyPassword } from "@/lib/password";
-import { parseId } from "@/lib/utils";
+import { countMemberships } from "@/lib/memberships";
+import {
+  generatePassword,
+  hashPassword,
+  passwordProblem,
+  verifyPassword,
+} from "@/lib/password";
+import {
+  type ActionResult,
+  type Fields,
+  type FormError,
+  parseId,
+} from "@/lib/utils";
 
 export type MemberStatus = "active" | "inactive";
 
@@ -247,4 +260,197 @@ export async function listAllMembers(): Promise<Member[]> {
     `SELECT ${COLUMNS} FROM users ORDER BY last_name, first_name`,
   );
   return rows;
+}
+
+/**
+ * Adds a member or an admin. A member gets a generated password, changed at
+ * the first login, and the welcome email when `sendWelcome`; an admin's
+ * password is typed on the form. Returns the new id and how the email went.
+ */
+export async function createMember(
+  get: Fields,
+  sendWelcome: boolean,
+): Promise<FormError | { id: string; welcome: "sent" | "failed" | null }> {
+  const f = parseMemberFields(get);
+  const invalid = memberFieldsProblem(f);
+  if (invalid) return invalid;
+
+  const isAdmin = f.role === "admin";
+  const password = isAdmin ? get("password") : generatePassword();
+  if (isAdmin) {
+    const problem = passwordProblem(password);
+    if (problem) return { field: "password", error: problem };
+  }
+  const passwordHash = await hashPassword(password);
+
+  let id: string;
+  try {
+    const { rows } = await db().query<{ id: string }>(
+      `INSERT INTO users
+         (email, password_hash, first_name, last_name, phone, role,
+          date_of_birth, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [
+        f.email,
+        passwordHash,
+        f.firstName,
+        f.lastName,
+        f.phone,
+        f.role,
+        f.dateOfBirth,
+        !isAdmin,
+      ],
+    );
+    id = rows[0].id;
+  } catch (err) {
+    if (hasPgCode(err, "23505")) return { field: "email", error: EMAIL_TAKEN };
+    throw err;
+  }
+
+  if (isAdmin || !sendWelcome) return { id, welcome: null };
+  try {
+    await sendWelcomeEmail(f.email, f.firstName, password);
+    return { id, welcome: "sent" };
+  } catch (err) {
+    console.error("welcome email failed", err);
+    return { id, welcome: "failed" };
+  }
+}
+
+/**
+ * Emails an existing member the welcome email with a new temporary password.
+ * The new password is kept only if the email went out.
+ */
+export async function resendWelcomeEmail(id: number): Promise<ActionResult> {
+  try {
+    const sent = await withTransaction(async (client) => {
+      const issued = await issueTemporaryPassword(client, id);
+      if (issued) {
+        await sendWelcomeEmail(issued.email, issued.first_name, issued.password);
+      }
+      return issued !== null;
+    });
+    if (!sent) {
+      return { error: "Το email καλωσορίσματος στέλνεται μόνο σε ενεργά μέλη." };
+    }
+  } catch (err) {
+    console.error("welcome email failed", err);
+    return {
+      error: "Το email δεν στάλθηκε, οπότε ο κωδικός του μέλους δεν άλλαξε.",
+    };
+  }
+  return { notice: "Στάλθηκε email καλωσορίσματος με νέο προσωρινό κωδικό." };
+}
+
+/**
+ * The write both update forms share. A blank password leaves the current one
+ * alone. `access` is null for the profile, which keeps role and status as they are.
+ */
+async function saveUser(
+  id: number,
+  f: MemberFields,
+  get: Fields,
+  access: { role: string; status: string } | null,
+): Promise<FormError | undefined> {
+  const password = get("password");
+  const problem = password ? passwordProblem(password) : null;
+  if (problem) return { field: "password", error: problem };
+  const passwordHash = password ? await hashPassword(password) : null;
+  const bump = endsSessions(passwordHash !== null, access?.status ?? null)
+    ? 1
+    : 0;
+
+  try {
+    const { rowCount } = await db().query(
+      `UPDATE users SET
+         email = $1, first_name = $2, last_name = $3, phone = $4,
+         date_of_birth = $5,
+         role = COALESCE($6::user_role, role),
+         status = COALESCE($7::user_status, status),
+         password_hash = COALESCE($8, password_hash),
+         token_version = token_version + $9
+       WHERE id = $10`,
+      [
+        f.email,
+        f.firstName,
+        f.lastName,
+        f.phone,
+        f.dateOfBirth,
+        access?.role ?? null,
+        access?.status ?? null,
+        passwordHash,
+        bump,
+        id,
+      ],
+    );
+    if (rowCount === 0) return { error: "Άγνωστο μέλος." };
+  } catch (err) {
+    if (hasPgCode(err, "23505")) return { field: "email", error: EMAIL_TAKEN };
+    throw err;
+  }
+  return undefined;
+}
+
+/** Saves a member's details, role and status; `adminId` cannot take away their own admin rights. */
+export async function updateMember(
+  id: number,
+  get: Fields,
+  adminId: number,
+): Promise<FormError | undefined> {
+  const f = parseMemberFields(get);
+  const invalid = memberFieldsProblem(f);
+  if (invalid) return invalid;
+
+  const status = get("status") === "inactive" ? "inactive" : "active";
+  if (id === adminId && (status === "inactive" || f.role !== "admin")) {
+    return { error: "Δεν μπορείς να αφαιρέσεις τα δικά σου δικαιώματα διαχειριστή." };
+  }
+
+  return saveUser(id, f, get, { role: f.role, status });
+}
+
+/** Saves an admin's own details, leaving their role and status alone. */
+export async function updateProfile(
+  userId: number,
+  get: Fields,
+): Promise<FormError | undefined> {
+  const f = parseMemberFields(get);
+  const invalid = memberFieldsProblem(f);
+  if (invalid) return invalid;
+
+  return saveUser(userId, f, get, null);
+}
+
+/** Deletes a member with no history, or says why not; `adminId` cannot delete themselves. */
+export async function deleteMember(
+  id: number,
+  adminId: number,
+): Promise<FormError | undefined> {
+  if (id === adminId) {
+    return { error: "Δεν μπορείς να διαγράψεις τον δικό σου λογαριασμό." };
+  }
+
+  if (await countMemberships(id)) {
+    return {
+      error:
+        "Το μέλος έχει ιστορικό συνδρομών και δεν μπορεί να διαγραφεί. Κάνε το μέλος ανενεργό αντί να το διαγράψεις.",
+    };
+  }
+
+  try {
+    const { rowCount } = await db().query("DELETE FROM users WHERE id = $1", [
+      id,
+    ]);
+    if (rowCount === 0) return { error: "Άγνωστο μέλος." };
+  } catch (err) {
+    if (hasPgCode(err, "23503")) {
+      return {
+        error:
+          "Το μέλος έχει κρατήσεις, μαθήματα, WOD ή ιστορικό συνδρομών και δεν μπορεί να διαγραφεί.",
+      };
+    }
+    throw err;
+  }
+  return undefined;
 }

@@ -369,6 +369,17 @@ board's toast says so and points to Συνδρομές to void it if it will not
 paid. It is not voided automatically: staff may have typed that row in, and
 whether it is still owed is a person's call.
 
+### Where writes live
+
+Every write - members, memberships, plans, class types and classes - is a
+function in its `lib/*` module that takes a field reader (`Fields` in
+`lib/utils.ts`), validates, writes, and returns `{ field, error }` in Greek
+when it refuses. The Server Actions in `app/actions/*` only check the admin,
+parse the id, and revalidate and redirect, so the mobile API calls the same
+functions and refuses the same way. The membership writes, like the booking
+ones, take a client already inside a transaction, so a check can roll them
+back and a caller can make a membership and a booking in one transaction.
+
 ### How booking is enforced
 
 All of it lives in `lib/bookings.ts` - `bookMember`, `cancelBooking`,
@@ -910,6 +921,7 @@ Cloudflare.
 | `lib/db.ts` | single pool, `withTransaction`, `greekFold()` | done |
 | `lib/bookings.ts` | booking rules: book, cancel, move, check in, void an unpaid membership (§8) | done |
 | `scripts/check-bookings.mts` | `npm run check:bookings`: every booking rule against the real database, rolled back | done |
+| `scripts/check-memberships.mts` | `npm run check:memberships`: the membership rules the same way; fixtures shared through `scripts/fixtures.mts` | done |
 | `app/(admin)/bookings/page.tsx` | Κρατήσεις: loads the week and renders the board | done |
 | `components/booking-board.tsx` | the board: drag to move, tap to cancel, `+` to add, Undo | done |
 | `app/(admin)/bookings/[id]/page.tsx` | Παρουσίες: one class's roll call | done |
@@ -926,8 +938,8 @@ Cloudflare.
 | `lib/api.ts` | the API routes' shared replies: `fail`, `signedOut`, `throttled`, `jsonBody` | done |
 | `proxy.ts` | optimistic route guard (Next 16 renamed `middleware`) | done |
 | `app/actions/auth.ts` | `login` / `logout` Server Actions | done |
-| `lib/members.ts` | member queries | done |
-| `app/actions/members.ts` | create / update / delete, with delete guards, and the admin's own profile | done |
+| `lib/members.ts` | member queries and writes: create, update, delete with its guards, welcome email, the admin's own profile | done |
+| `app/actions/members.ts` | thin Server Actions over `lib/members.ts`, plus re-issuing the admin's cookie after they save their own row | done |
 | `app/(admin)/members/*` | list, view, create, update | done |
 | `app/(admin)/profile/page.tsx` | the logged-in admin edits their own details | done |
 | `components/member-form.tsx` | shared create/update form, and the profile form without role or status | done |

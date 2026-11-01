@@ -1,8 +1,12 @@
 import "server-only";
 
+import type { PoolClient } from "pg";
+
+import { visitsAfterEdit } from "@/lib/bookings";
 import {
   db,
   greekFold,
+  hasPgCode,
   likeLiteral,
   type Page,
   paginate,
@@ -10,13 +14,16 @@ import {
 } from "@/lib/db";
 import {
   isMembershipState,
+  isMembershipStatus,
+  isPaymentMethod,
   type BillingInterval,
   type MembershipState,
   type MembershipStatus,
   type PaymentMethod,
 } from "@/lib/enums";
-import { formatDate } from "@/lib/gym-time";
-import { parseId } from "@/lib/utils";
+import { formatDate, isRealDate } from "@/lib/gym-time";
+import { parsePriceToCents } from "@/lib/money";
+import { type Fields, type FormError, parseId } from "@/lib/utils";
 
 export type Membership = {
   id: string;
@@ -375,4 +382,222 @@ export async function listMemberships(
     values,
     filter.page,
   );
+}
+
+type ParsedMembership = {
+  userId: number;
+  planId: number;
+  status: string;
+  startsOn: string;
+  amountCents: number;
+  method: string;
+  paidOn: string | null;
+};
+
+function parseFields(get: Fields): ParsedMembership | Required<FormError> {
+  const value = (key: string) => get(key).trim();
+
+  const userId = parseId(value("user_id"));
+  if (userId === null) return { field: "user_id", error: "Διάλεξε μέλος." };
+
+  const planId = parseId(value("plan_id"));
+  if (planId === null) return { field: "plan_id", error: "Διάλεξε πακέτο." };
+
+  const status = value("status");
+  if (!isMembershipStatus(status)) {
+    return { field: "status", error: "Διάλεξε κατάσταση." };
+  }
+
+  const startsOn = value("starts_on");
+  if (!isRealDate(startsOn)) {
+    return { field: "starts_on", error: "Δώσε υπαρκτή ημερομηνία έναρξης." };
+  }
+
+  // Zero is allowed and means granted rather than sold.
+  const amountCents = parsePriceToCents(value("amount"));
+  if (amountCents === null) {
+    return { field: "amount", error: "Δώσε ποσό όπως 60 ή 60,50." };
+  }
+
+  const method = value("method");
+  if (!isPaymentMethod(method)) {
+    return { field: "method", error: "Διάλεξε τρόπο πληρωμής." };
+  }
+
+  // Blank is the money not collected yet, which reads as Unpaid.
+  const paidOn = value("paid_on");
+  if (paidOn && !isRealDate(paidOn)) {
+    return { field: "paid_on", error: "Δώσε υπαρκτή ημερομηνία πληρωμής ή καθάρισέ τη αν είναι ανεξόφλητη." };
+  }
+
+  if (amountCents === 0 && !paidOn) {
+    return { field: "paid_on", error: "Μια δωρεάν περίοδος δεν έχει τίποτα να εισπραχθεί. Όρισε ημερομηνία πληρωμής." };
+  }
+
+  return {
+    userId,
+    planId,
+    status,
+    startsOn,
+    amountCents,
+    method,
+    paidOn: paidOn || null,
+  };
+}
+
+function overlapRefusal(clash: Overlap): Required<FormError> {
+  return {
+    field: "starts_on",
+    error: `Επικαλύπτεται με τη συνδρομή ${describeOverlap(clash)}. Άλλαξε την έναρξη ή κάνε εκείνη ανενεργή.`,
+  };
+}
+
+const UNKNOWN_MEMBER = { field: "user_id", error: "Άγνωστο μέλος." };
+
+/**
+ * Records a membership, with `adminId` as who took the money when it is paid.
+ * `client` must already be inside a transaction.
+ */
+export async function createMembership(
+  client: PoolClient,
+  get: Fields,
+  adminId: number,
+): Promise<FormError | { userId: number }> {
+  const f = parseFields(get);
+  if ("error" in f) return f;
+
+  const { rowCount: found } = await client.query(
+    "SELECT 1 FROM users WHERE id = $1 FOR UPDATE",
+    [f.userId],
+  );
+  if (!found) return UNKNOWN_MEMBER;
+
+  if (f.status === "active") {
+    const clash = await findOverlap(client, f.userId, f.planId, f.startsOn);
+    if (clash) return overlapRefusal(clash);
+  }
+
+  const { rowCount } = await client.query(
+    `INSERT INTO memberships
+       (user_id, plan_id, status, starts_on, ends_on, visits_remaining,
+        amount_cents, method, paid_on, recorded_by)
+     SELECT $2, p.id, $3, $1::date, ${periodEndsOn("$1")}, p.visits,
+            $5, $6, $7::date,
+            CASE WHEN $7::date IS NULL THEN NULL ELSE $8::bigint END
+     FROM plans p WHERE p.id = $4`,
+    [
+      f.startsOn,
+      f.userId,
+      f.status,
+      f.planId,
+      f.amountCents,
+      f.method,
+      f.paidOn,
+      adminId,
+    ],
+  );
+  return rowCount === 0
+    ? { field: "plan_id", error: "Άγνωστο πακέτο." }
+    : { userId: f.userId };
+}
+
+/**
+ * Saves a membership. Visits typed by staff win; a field still holding
+ * `visits_shown` counts as untouched. Returns the member it now belongs to and
+ * the one it belonged to before. `client` must already be inside a transaction.
+ */
+export async function updateMembership(
+  client: PoolClient,
+  id: number,
+  get: Fields,
+  adminId: number,
+): Promise<FormError | { userId: number; previousUserId: string }> {
+  const f = parseFields(get);
+  if ("error" in f) return f;
+
+  const rawVisits = get("visits_remaining").trim();
+  const untouched = rawVisits === get("visits_shown").trim();
+  let visitsRemaining: number | null | undefined = untouched ? undefined : null;
+  if (rawVisits && !untouched) {
+    const n = Number(rawVisits);
+    if (!Number.isSafeInteger(n) || n < 0) {
+      return { field: "visits_remaining", error: "Οι υπόλοιπες επισκέψεις πρέπει να είναι μηδέν ή ακέραιος αριθμός." };
+    }
+    visitsRemaining = n;
+  }
+
+  const { rowCount: found } = await client.query(
+    "SELECT 1 FROM users WHERE id = $1 FOR UPDATE",
+    [f.userId],
+  );
+  if (!found) return UNKNOWN_MEMBER;
+
+  const { rows: before } = await client.query<{
+    user_id: string;
+    plan_id: string;
+    status: string;
+    starts_on: string;
+  }>(
+    `SELECT user_id, plan_id, status,
+            to_char(starts_on, 'YYYY-MM-DD') AS starts_on
+     FROM memberships WHERE id = $1 FOR UPDATE`,
+    [id],
+  );
+  if (before.length === 0) return { error: "Άγνωστη συνδρομή." };
+  const was = before[0];
+
+  const periodChanged =
+    was.user_id !== String(f.userId) ||
+    was.plan_id !== String(f.planId) ||
+    was.starts_on !== f.startsOn ||
+    was.status !== f.status;
+  if (f.status === "active" && periodChanged) {
+    const clash = await findOverlap(client, f.userId, f.planId, f.startsOn, id);
+    if (clash) return overlapRefusal(clash);
+  }
+
+  const visits = await visitsAfterEdit(client, id, f.planId, visitsRemaining);
+  if (!visits.ok) return { field: "plan_id", error: visits.error };
+
+  let rowCount: number | null;
+  try {
+    ({ rowCount } = await client.query(
+      `UPDATE memberships m SET
+         user_id = $2, plan_id = $4, status = $3, starts_on = $1::date,
+         ends_on = ${periodEndsOn("$1")},
+         visits_remaining = $5,
+         amount_cents = $7, method = $8, paid_on = $9::date,
+         recorded_by = CASE WHEN $9::date IS NULL THEN NULL
+                            ELSE COALESCE(m.recorded_by, $10::bigint) END
+       FROM plans p
+       WHERE p.id = $4 AND m.id = $6`,
+      [
+        f.startsOn,
+        f.userId,
+        f.status,
+        f.planId,
+        visits.visits,
+        id,
+        f.amountCents,
+        f.method,
+        f.paidOn,
+        adminId,
+      ],
+    ));
+  } catch (err) {
+    // The failed UPDATE aborts the transaction, so the caller's COMMIT rolls it back.
+    if (
+      hasPgCode(err, "23503") &&
+      (err as { constraint?: string }).constraint ===
+        "bookings_membership_belongs_to_member"
+    ) {
+      return {
+        field: "user_id",
+        error: "Η συνδρομή έχει ήδη κρατήσεις, οπότε δεν μπορεί να περάσει σε άλλο μέλος. Φτιάξε νέα συνδρομή για το σωστό μέλος.",
+      };
+    }
+    throw err;
+  }
+  if (rowCount === 0) return { error: "Άγνωστη συνδρομή." };
+  return { userId: f.userId, previousUserId: was.user_id };
 }

@@ -688,8 +688,22 @@ export async function visitsAfterEdit(
 }
 
 export type CancelSessionResult =
-  | { ok: true; cancelled: number; voided: number }
+  | { ok: true; cancelled: number; voided: number; notice: string }
   | Refused;
+
+const count = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+/** What staff are told once a class is cancelled. */
+function cancelNotice(cancelled: number, voided: number): string {
+  const total = cancelled + voided;
+  if (total === 0) return "Το μάθημα ακυρώθηκε. Δεν είχε κρατήσεις.";
+  const gone =
+    voided > 0
+      ? ` Διαγράφηκαν ${count(voided, "ανεξόφλητη συνδρομή", "ανεξόφλητες συνδρομές")} που είχαν γίνει μόνο γι' αυτό.`
+      : "";
+  return `Το μάθημα ακυρώθηκε, μαζί με ${count(total, "κράτηση", "κρατήσεις")}. Οι επισκέψεις επιστράφηκαν.${gone}`;
+}
 
 /**
  * Cancels a class and gives back what its bookings spent. The gym called it
@@ -746,5 +760,5 @@ export async function cancelSession(
       cancelled += 1;
     }
   }
-  return { ok: true, cancelled, voided };
+  return { ok: true, cancelled, voided, notice: cancelNotice(cancelled, voided) };
 }
