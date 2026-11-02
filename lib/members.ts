@@ -236,12 +236,13 @@ export function sendWelcomeEmail(to: string, firstName: string, password: string
     gym,
   ].join("\n");
   const paragraph = (s: string) => `<p>${escapeHtml(s).replaceAll("\n", "<br>")}</p>`;
-  const button = `<p><a href="${APP_STORE_URL}" style="display:inline-block;background:#000;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Λήψη από το App Store</a></p>`;
+  const button = `<p><a class="app-store" href="${APP_STORE_URL}" style="display:inline-block;background:#000;color:#fff;border:1px solid #a6a6a6;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Λήψη από το App Store</a></p>`;
+  const head = `<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>@media (prefers-color-scheme: dark){.app-store{background:#fff!important;color:#000!important}}</style>`;
   return sendEmail(
     to,
     `Καλώς ήρθες στο ${gym}`,
     [intro, `Κατέβασε την εφαρμογή από το App Store: ${APP_STORE_URL}`, steps].join("\n\n"),
-    `<div style="font-family:sans-serif;font-size:15px;line-height:1.5">${paragraph(intro)}${button}${paragraph(steps)}</div>`,
+    `<html><head>${head}</head><body><div style="font-family:sans-serif;font-size:15px;line-height:1.5">${paragraph(intro)}${button}${paragraph(steps)}</div></body></html>`,
   );
 }
 
