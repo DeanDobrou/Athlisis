@@ -11,10 +11,13 @@ export function gymName(): string {
   return name;
 }
 
-/** Sends a plain-text email through the SMTP server in SMTP_URL. */
-export async function sendEmail(to: string, subject: string, text: string) {
+/** Sends an email through the SMTP server in SMTP_URL, with an optional HTML version. */
+export async function sendEmail(to: string, subject: string, text: string, html?: string) {
   const url = process.env.SMTP_URL;
   if (!url) throw new Error("SMTP_URL must be set to send email");
   transport ??= createTransport(url);
-  await transport.sendMail({ from: process.env.EMAIL_FROM, to, subject, text });
+  await transport.sendMail({ from: process.env.EMAIL_FROM, to, subject, text, html });
 }
+
+/** Escapes text for use inside HTML. */
+export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

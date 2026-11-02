@@ -11,7 +11,7 @@ import {
   type Queryable,
   withTransaction,
 } from "@/lib/db";
-import { gymName, sendEmail } from "@/lib/email";
+import { escapeHtml, gymName, sendEmail } from "@/lib/email";
 import { issueCode, spendCode } from "@/lib/email-codes";
 import { isRealDate, todayInGym } from "@/lib/gym-time";
 import { countMemberships } from "@/lib/memberships";
@@ -27,6 +27,8 @@ import {
   type FormError,
   parseId,
 } from "@/lib/utils";
+
+const APP_STORE_URL = "https://apps.apple.com/gr/app/as-athlisis/id6828026459?l=el";
 
 export type MemberStatus = "active" | "inactive";
 
@@ -215,26 +217,31 @@ async function emailTaken(runner: Queryable, email: string, exceptId: number) {
  */
 export function sendWelcomeEmail(to: string, firstName: string, password: string) {
   const gym = gymName();
+  const intro = [
+    `Γεια σου ${firstName},`,
+    "",
+    `Ο λογαριασμός σου στο ${gym} είναι έτοιμος. Με αυτόν κλείνεις θέση στα μαθήματα από την εφαρμογή.`,
+    "",
+    `Email: ${to}`,
+    `Προσωρινός κωδικός: ${password}`,
+  ].join("\n");
+  const steps = [
+    "Η πρώτη σου σύνδεση:",
+    "1. Άνοιξε την εφαρμογή και συνδέσου με το email σου και τον προσωρινό κωδικό.",
+    "2. Η εφαρμογή θα σου ζητήσει να διαλέξεις τον δικό σου κωδικό. Ο προσωρινός ισχύει μόνο για αυτή την πρώτη σύνδεση.",
+    "3. Από εκεί και πέρα συνδέεσαι με το email σου και τον κωδικό που διάλεξες.",
+    "",
+    "Αν ξεχάσεις τον κωδικό σου, πάτησε «Ξέχασες τον κωδικό;» στην οθόνη σύνδεσης και θα σου στείλουμε κωδικό με email για να ορίσεις νέο.",
+    "",
+    gym,
+  ].join("\n");
+  const paragraph = (s: string) => `<p>${escapeHtml(s).replaceAll("\n", "<br>")}</p>`;
+  const button = `<p><a href="${APP_STORE_URL}" style="display:inline-block;background:#000;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Λήψη από το App Store</a></p>`;
   return sendEmail(
     to,
     `Καλώς ήρθες στο ${gym}`,
-    [
-      `Γεια σου ${firstName},`,
-      "",
-      `Ο λογαριασμός σου στο ${gym} είναι έτοιμος. Με αυτόν κλείνεις θέση στα μαθήματα από την εφαρμογή.`,
-      "",
-      `Email: ${to}`,
-      `Προσωρινός κωδικός: ${password}`,
-      "",
-      "Η πρώτη σου σύνδεση:",
-      "1. Άνοιξε την εφαρμογή και συνδέσου με το email σου και τον προσωρινό κωδικό.",
-      "2. Η εφαρμογή θα σου ζητήσει να διαλέξεις τον δικό σου κωδικό. Ο προσωρινός ισχύει μόνο για αυτή την πρώτη σύνδεση.",
-      "3. Από εκεί και πέρα συνδέεσαι με το email σου και τον κωδικό που διάλεξες.",
-      "",
-      "Αν ξεχάσεις τον κωδικό σου, πάτησε «Ξέχασες τον κωδικό;» στην οθόνη σύνδεσης και θα σου στείλουμε κωδικό με email για να ορίσεις νέο.",
-      "",
-      gym,
-    ].join("\n"),
+    [intro, `Κατέβασε την εφαρμογή από το App Store: ${APP_STORE_URL}`, steps].join("\n\n"),
+    `<div style="font-family:sans-serif;font-size:15px;line-height:1.5">${paragraph(intro)}${button}${paragraph(steps)}</div>`,
   );
 }
 
